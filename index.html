@@ -197,6 +197,31 @@
       80% { opacity: .45; }
     }
 
+    .display-wrap.flicker13-glow {
+      box-shadow: 0 0 25px rgba(0,0,0,.6) inset, 0 0 14px rgba(226,0,43,.2), 0 0 22px rgba(197,15,31,.28);
+      border-color: rgba(197,15,31,.75);
+    }
+    .display.flicker13-rapid { animation: flicker13Rapid 90ms steps(2, end) infinite; }
+    .display.flicker13-pulse { animation: flicker13Pulse 850ms ease-in-out infinite; }
+    .maintenance-hotspot.flicker13-window {
+      opacity: .55;
+      border-color: rgba(255,88,96,.7);
+      box-shadow: 0 0 12px rgba(197,15,31,.25);
+    }
+
+    @keyframes flicker13Rapid {
+      0%, 100% { opacity: 1; filter: none; }
+      25% { opacity: .32; filter: brightness(.72); }
+      50% { opacity: .8; filter: contrast(1.24); }
+      75% { opacity: .48; }
+    }
+
+    @keyframes flicker13Pulse {
+      0%, 100% { opacity: 1; filter: none; }
+      45% { opacity: .6; filter: brightness(.82); }
+      65% { opacity: .88; filter: contrast(1.08); }
+    }
+
     .blackout {
       position: fixed;
       inset: 0;
@@ -227,6 +252,11 @@
     .ending {
       pointer-events: none;
       overflow: hidden;
+    }
+    .ending.trapped-layout {
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: 6vh;
     }
     .ending-effect {
       position: absolute;
@@ -389,6 +419,10 @@
       ending: null
     };
 
+    const FLICKER13_DURATION = 3000;
+    const FLICKER13_RAPID_MS = 500;
+    let flicker13Active = false;
+
     const els = {
       display: document.getElementById("display"),
       narration: document.getElementById("narration"),
@@ -508,18 +542,32 @@
       log("Two floor labels have switched places.");
     }
 
-    function forcedThirteenFlicker() {
+    async function forcedThirteenFlicker() {
       const old = state.displayedFloor;
+      flicker13Active = true;
       state.displayedFloor = "13";
-      els.display.classList.add("flicker");
+      els.display.classList.add("flicker13-rapid");
+      els.display.classList.remove("flicker13-pulse");
+      els.display.parentElement.classList.add("flicker13-glow");
+      els.maintHotspot.classList.add("flicker13-window");
+      playTone("warn", 0.4, 176);
       updateMeters();
-      setTimeout(() => {
-        state.displayedFloor = old;
-        els.display.classList.remove("flicker");
-        updateMeters();
-      }, 700);
       state.suspicion = Math.min(100, state.suspicion + 16);
       log("The display flashes 13, then pretends it did not.");
+
+      setTimeout(() => {
+        if (!flicker13Active) return;
+        els.display.classList.remove("flicker13-rapid");
+        els.display.classList.add("flicker13-pulse");
+      }, FLICKER13_RAPID_MS);
+
+      await sleep(FLICKER13_DURATION);
+      flicker13Active = false;
+      state.displayedFloor = old;
+      els.display.classList.remove("flicker13-rapid", "flicker13-pulse");
+      els.display.parentElement.classList.remove("flicker13-glow");
+      els.maintHotspot.classList.remove("flicker13-window");
+      updateMeters();
     }
 
     function intercomWarning() {
@@ -626,8 +674,10 @@
         state.displayedFloor = "13";
         els.jump.classList.add("active");
         els.app.classList.add("jitter");
+        els.ending.classList.add("trapped-layout");
         html = `<h2>Trapped Ending</h2><p>The panel goes dead. The display locks to 13. From inside the walls: breathing, then laughter.</p><p><strong>WELCOME HOME.</strong></p><button onclick="location.reload()">Try Again</button>`;
       }
+      if (type !== "bad") els.ending.classList.remove("trapped-layout");
       updateMeters();
       els.endingCard.innerHTML = html;
       els.ending.classList.add("active");
@@ -692,6 +742,7 @@
       floors.forEach((f, idx) => f.label = String(idx + 1));
       els.jump.classList.remove("active");
       els.ending.classList.remove("active");
+      els.ending.classList.remove("trapped-layout");
       els.narration.innerHTML = "";
       log("The elevator wakes. A cold voice says: choose a floor.");
       renderButtons();
