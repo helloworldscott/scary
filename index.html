@@ -160,20 +160,66 @@
       gap: .7rem;
     }
 
-    .maintenance-hotspot {
+    .maintenance-hatch {
       position: absolute;
-      right: 14px;
-      bottom: 15px;
-      width: 82px;
-      height: 54px;
-      border: 1px dashed rgba(255,255,255,.26);
-      border-radius: 6px;
-      opacity: .18;
-      cursor: pointer;
-      transition: opacity .2s;
-      z-index: 4;
+      left: 1rem;
+      bottom: -5.2rem;
+      width: 76px;
+      height: 76px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.24);
+      background: linear-gradient(160deg, rgba(40,40,40,.95), rgba(18,18,18,.95));
+      color: #a8a8a8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 45;
+      cursor: default;
+      transition: border-color .2s ease, box-shadow .2s ease, opacity .2s ease, transform .2s ease;
+      opacity: .55;
     }
-    .maintenance-hotspot:hover { opacity: .45; }
+    .hatch-label {
+      font-size: .62rem;
+      letter-spacing: .08rem;
+      font-weight: 700;
+      pointer-events: none;
+    }
+    .hatch-tooltip {
+      position: absolute;
+      left: calc(100% + .45rem);
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(8,8,8,.95);
+      color: #ffd8dc;
+      border: 1px solid rgba(255,106,118,.62);
+      border-radius: 6px;
+      padding: .3rem .45rem;
+      white-space: nowrap;
+      font-size: .68rem;
+      letter-spacing: .05rem;
+      opacity: 0;
+      pointer-events: auto;
+      transition: opacity .14s ease;
+      z-index: 46;
+    }
+    .maintenance-hatch.debug-hotspot {
+      outline: 1px dashed rgba(255,255,255,.35);
+      outline-offset: 2px;
+    }
+    .maintenance-hatch.active {
+      opacity: .98;
+      border-color: rgba(255,92,92,.95);
+      box-shadow: 0 0 12px rgba(190,20,35,.45), inset 0 0 10px rgba(255,120,120,.2);
+      cursor: pointer;
+      animation: hatchPulse 650ms ease-in-out infinite;
+      transform: translateY(-2px);
+    }
+    .maintenance-hatch.active .hatch-tooltip { opacity: 1; }
+
+    @keyframes hatchPulse {
+      0%, 100% { box-shadow: 0 0 10px rgba(190,20,35,.38), inset 0 0 8px rgba(255,120,120,.15); }
+      50% { box-shadow: 0 0 17px rgba(220,40,55,.58), inset 0 0 12px rgba(255,120,120,.28); }
+    }
 
     .scratch {
       position: absolute;
@@ -195,6 +241,25 @@
       25% { opacity: .35; filter: brightness(.7); }
       50% { opacity: .85; filter: contrast(1.3); }
       80% { opacity: .45; }
+    }
+
+    .display-wrap.flicker13-glow {
+      box-shadow: 0 0 25px rgba(0,0,0,.6) inset, 0 0 14px rgba(226,0,43,.2), 0 0 22px rgba(197,15,31,.28);
+      border-color: rgba(197,15,31,.75);
+    }
+    .display.flicker13-rapid { animation: flicker13Rapid 90ms steps(2, end) infinite; }
+    .display.flicker13-pulse { animation: flicker13Pulse 850ms ease-in-out infinite; }
+    @keyframes flicker13Rapid {
+      0%, 100% { opacity: 1; filter: none; }
+      25% { opacity: .32; filter: brightness(.72); }
+      50% { opacity: .8; filter: contrast(1.24); }
+      75% { opacity: .48; }
+    }
+
+    @keyframes flicker13Pulse {
+      0%, 100% { opacity: 1; filter: none; }
+      45% { opacity: .6; filter: brightness(.82); }
+      65% { opacity: .88; filter: contrast(1.08); }
     }
 
     .blackout {
@@ -227,6 +292,11 @@
     .ending {
       pointer-events: none;
       overflow: hidden;
+    }
+    .ending.trapped-layout {
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: 6vh;
     }
     .ending-effect {
       position: absolute;
@@ -275,6 +345,11 @@
   <div class="app" id="app">
     <div class="left">
       <div class="display-wrap">
+        <!-- Hatch positioned near the left display/panel area for clear interaction during flicker -->
+        <button id="maintenanceHatch" class="maintenance-hatch" aria-live="polite">
+          <span class="hatch-label">SERVICE</span>
+          <span class="hatch-tooltip" id="hatchTooltip">MAINTENANCE — CLICK NOW</span>
+        </button>
         <div class="display" id="display">--</div>
         <div class="status">
           <span id="stateLabel">STATE: IDLE</span>
@@ -292,7 +367,7 @@
       <div class="top-controls">
         <button id="newBtn">New Game</button>
         <button id="continueBtn">Continue</button>
-        <button id="muteBtn">Mute: ON</button>
+        <button id="muteBtn">Sound: MUTED</button>
         <button id="inspectBtn">Inspection Certificate</button>
         <button id="restartBtn">Restart</button>
       </div>
@@ -300,7 +375,7 @@
       <div style="position:relative;">
         <div class="scratch" title="Scratch marks: 4 long, 2 short, 9 deep"></div>
         <div class="floor-grid" id="floorGrid"></div>
-        <div class="maintenance-hotspot" id="maintHotspot" title="Loose maintenance panel"></div>
+
       </div>
 
       <div class="hint-strip">
@@ -389,6 +464,12 @@
       ending: null
     };
 
+    const FLICKER13_DURATION = 3000;
+    const FLICKER13_RAPID_MS = 500;
+    const DEBUG_HOTSPOTS = false;
+    let flicker13Active = false;
+    let panelPulseTimer = null;
+
     const els = {
       display: document.getElementById("display"),
       narration: document.getElementById("narration"),
@@ -406,7 +487,8 @@
       inspectBtn: document.getElementById("inspectBtn"),
       inspectModal: document.getElementById("inspectModal"),
       closeInspect: document.getElementById("closeInspect"),
-      maintHotspot: document.getElementById("maintHotspot"),
+      maintenanceHatch: document.getElementById("maintenanceHatch"),
+      hatchTooltip: document.getElementById("hatchTooltip"),
       codeModal: document.getElementById("codeModal"),
       codeInput: document.getElementById("codeInput"),
       submitCode: document.getElementById("submitCode"),
@@ -416,22 +498,140 @@
       endingCard: document.getElementById("endingCard")
     };
 
+    // WebAudio functions: init + creepy synth/noise cues (no external files)
     let audioCtx;
-    function playTone(type = "hum", duration = 0.6, freq = 120) {
+    function ensureAudioContext() {
+      if (audioCtx) return audioCtx;
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      return audioCtx;
+    }
+
+    function initAudioOnFirstInteraction() {
+      document.addEventListener("pointerdown", () => {
+        const ctx = ensureAudioContext();
+        if (ctx.state === "suspended") ctx.resume();
+      }, { once: true });
+    }
+
+    function playTick() {
       if (state.muted) return;
-      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = type === "warn" ? "sawtooth" : "sine";
-      osc.frequency.value = freq;
+      const ctx = ensureAudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "square";
+      osc.frequency.value = 780;
       gain.gain.value = 0.0001;
       osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      const now = audioCtx.currentTime;
-      gain.gain.exponentialRampToValueAtTime(0.05, now + 0.04);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+      gain.connect(ctx.destination);
+      const now = ctx.currentTime;
+      gain.gain.exponentialRampToValueAtTime(0.02, now + 0.004);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
       osc.start(now);
-      osc.stop(now + duration);
+      osc.stop(now + 0.07);
+    }
+
+    function playTravelHum() {
+      if (state.muted) return;
+      const ctx = ensureAudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(78, ctx.currentTime);
+      osc.frequency.linearRampToValueAtTime(102, ctx.currentTime + 0.7);
+      gain.gain.value = 0.0001;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      const now = ctx.currentTime;
+      gain.gain.exponentialRampToValueAtTime(0.04, now + 0.09);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.72);
+      osc.start(now);
+      osc.stop(now + 0.75);
+    }
+
+    function playNoiseBurst(duration = 0.12, gainLevel = 0.03) {
+      if (state.muted) return;
+      const ctx = ensureAudioContext();
+      const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * duration), ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * 0.9;
+      const src = ctx.createBufferSource();
+      const gain = ctx.createGain();
+      src.buffer = buffer;
+      src.connect(gain);
+      gain.connect(ctx.destination);
+      const now = ctx.currentTime;
+      gain.gain.value = 0.0001;
+      gain.gain.exponentialRampToValueAtTime(gainLevel, now + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+      src.start(now);
+      src.stop(now + duration);
+    }
+
+    function playFlickerSpark() {
+      if (state.muted) return;
+      const ctx = ensureAudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(1420, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(640, ctx.currentTime + 0.12);
+      gain.gain.value = 0.0001;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      const now = ctx.currentTime;
+      gain.gain.exponentialRampToValueAtTime(0.025, now + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+      osc.start(now);
+      osc.stop(now + 0.15);
+      playNoiseBurst(0.12, 0.02);
+    }
+
+    function startPanelPulseTone() {
+      if (state.muted || !flicker13Active) return;
+      const pulse = () => {
+        if (!flicker13Active || state.muted) return;
+        const ctx = ensureAudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = 184;
+        gain.gain.value = 0.0001;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        const now = ctx.currentTime;
+        gain.gain.exponentialRampToValueAtTime(0.015, now + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+        osc.start(now);
+        osc.stop(now + 0.3);
+        panelPulseTimer = setTimeout(pulse, 360);
+      };
+      pulse();
+    }
+
+    function stopPanelPulseTone() {
+      if (panelPulseTimer) {
+        clearTimeout(panelPulseTimer);
+        panelPulseTimer = null;
+      }
+    }
+
+    function playBadEndingSound() {
+      if (state.muted) return;
+      const ctx = ensureAudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(420, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(58, ctx.currentTime + 1.1);
+      gain.gain.value = 0.0001;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      const now = ctx.currentTime;
+      gain.gain.exponentialRampToValueAtTime(0.08, now + 0.1);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.15);
+      osc.start(now);
+      osc.stop(now + 1.2);
+      playNoiseBurst(0.9, 0.045);
     }
 
     function rand(n) { return Math.floor(Math.random() * n); }
@@ -455,6 +655,14 @@
         const f = +b.dataset.floor;
         b.disabled = state.mode !== "IDLE" || state.blockedFloors.includes(f) || !state.alive;
       });
+      updateMaintenanceHatchUI();
+    }
+
+    function updateMaintenanceHatchUI() {
+      if (DEBUG_HOTSPOTS) els.maintenanceHatch.classList.add("debug-hotspot");
+      else els.maintenanceHatch.classList.remove("debug-hotspot");
+      els.maintenanceHatch.classList.toggle("active", flicker13Active);
+      els.hatchTooltip.style.opacity = flicker13Active ? "1" : "0";
     }
 
     function saveGame() {
@@ -475,6 +683,7 @@
         log("You remember where the doors last opened.");
         updateRepeatMessage();
         renderButtons();
+        els.muteBtn.textContent = `Sound: ${state.muted ? "MUTED" : "LIVE"}`;
         updateMeters();
         return true;
       } catch { return false; }
@@ -508,22 +717,40 @@
       log("Two floor labels have switched places.");
     }
 
-    function forcedThirteenFlicker() {
+    async function forcedThirteenFlicker() {
       const old = state.displayedFloor;
+      flicker13Active = true;
+      // flicker13Active toggles hatch UI/readability state for the whole interaction window
+      updateMaintenanceHatchUI();
       state.displayedFloor = "13";
-      els.display.classList.add("flicker");
+      els.display.classList.add("flicker13-rapid");
+      els.display.classList.remove("flicker13-pulse");
+      els.display.parentElement.classList.add("flicker13-glow");
+      playFlickerSpark();
+      startPanelPulseTone();
       updateMeters();
-      setTimeout(() => {
-        state.displayedFloor = old;
-        els.display.classList.remove("flicker");
-        updateMeters();
-      }, 700);
       state.suspicion = Math.min(100, state.suspicion + 16);
       log("The display flashes 13, then pretends it did not.");
+      log("The hatch hums. It’s OPEN—NOW.");
+
+      setTimeout(() => {
+        if (!flicker13Active) return;
+        els.display.classList.remove("flicker13-rapid");
+        els.display.classList.add("flicker13-pulse");
+      }, FLICKER13_RAPID_MS);
+
+      await sleep(FLICKER13_DURATION);
+      flicker13Active = false;
+      stopPanelPulseTone();
+      updateMaintenanceHatchUI();
+      state.displayedFloor = old;
+      els.display.classList.remove("flicker13-rapid", "flicker13-pulse");
+      els.display.parentElement.classList.remove("flicker13-glow");
+      updateMeters();
     }
 
     function intercomWarning() {
-      playTone("warn", 0.8, 220);
+      playFlickerSpark();
       state.messageLevel += 1;
       updateRepeatMessage();
       log('Intercom: "DO NOT PRESS 13."');
@@ -626,8 +853,11 @@
         state.displayedFloor = "13";
         els.jump.classList.add("active");
         els.app.classList.add("jitter");
+        els.ending.classList.add("trapped-layout");
+        playBadEndingSound();
         html = `<h2>Trapped Ending</h2><p>The panel goes dead. The display locks to 13. From inside the walls: breathing, then laughter.</p><p><strong>WELCOME HOME.</strong></p><button onclick="location.reload()">Try Again</button>`;
       }
+      if (type !== "bad") els.ending.classList.remove("trapped-layout");
       updateMeters();
       els.endingCard.innerHTML = html;
       els.ending.classList.add("active");
@@ -646,7 +876,7 @@
 
       setMode("TRAVEL");
       els.doors.classList.add("closing");
-      playTone("hum", 1.2, 96);
+      playTravelHum();
       log(`Doors close. You selected floor ${floor}.`);
 
       await sleep(900);
@@ -692,6 +922,7 @@
       floors.forEach((f, idx) => f.label = String(idx + 1));
       els.jump.classList.remove("active");
       els.ending.classList.remove("active");
+      els.ending.classList.remove("trapped-layout");
       els.narration.innerHTML = "";
       log("The elevator wakes. A cold voice says: choose a floor.");
       renderButtons();
@@ -706,7 +937,11 @@
     });
     els.closeInspect.addEventListener("click", () => els.inspectModal.classList.remove("active"));
 
-    els.maintHotspot.addEventListener("click", () => {
+    els.maintenanceHatch.addEventListener("click", () => {
+      if (!flicker13Active) {
+        log("Dead panel. It won’t budge.");
+        return;
+      }
       state.clueFound.panel = true;
       log("You pry open the hidden maintenance panel.");
       if (state.displayedFloor === "13" && state.codeDigitsFound.length === 4) {
@@ -739,7 +974,7 @@
 
     els.muteBtn.addEventListener("click", () => {
       state.muted = !state.muted;
-      els.muteBtn.textContent = `Mute: ${state.muted ? "ON" : "OFF"}`;
+      els.muteBtn.textContent = `Sound: ${state.muted ? "MUTED" : "LIVE"}`;
       saveGame();
     });
 
@@ -750,6 +985,10 @@
     });
 
     function init() {
+      initAudioOnFirstInteraction();
+      document.addEventListener("click", (e) => {
+        if (e.target.closest("button")) playTick();
+      });
       renderButtons();
       els.continueBtn.disabled = !hasSave();
       if (!hasSave()) {
