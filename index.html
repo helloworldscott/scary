@@ -153,6 +153,10 @@
       gap: .6rem;
       align-content: start;
     }
+    .floor-grid-wrap {
+      position: relative;
+      isolation: isolate;
+    }
     .floor-btn {
       min-height: 56px;
       min-width: 56px;
@@ -166,20 +170,84 @@
       box-shadow: 0 0 0 2px rgba(242,74,102,.35) inset;
     }
 
-    .scratch {
+    .scratch-clue {
       position: absolute;
-      left: 9px;
-      top: 48%;
-      width: 56px;
-      height: 68px;
-      border: 1px solid rgba(214,214,214,.18);
-      border-radius: 4px;
-      opacity: .36;
-      cursor: pointer;
-      background:
-        linear-gradient(35deg, transparent 23%, #888 24%, #aaa 25%, transparent 26%),
-        linear-gradient(67deg, transparent 30%, #8e8e8e 31%, #b9b9b9 33%, transparent 34%),
-        linear-gradient(18deg, transparent 56%, #797979 57%, #aaa 58%, transparent 59%);
+      left: -36px;
+      top: 60%;
+      transform: translateY(-50%) rotate(-1.5deg) skewY(1.2deg);
+      pointer-events: none;
+      z-index: 1;
+      opacity: .25;
+      transition: opacity .35s ease, filter .35s ease, text-shadow .35s ease;
+      filter: blur(.25px) contrast(1.08);
+      mix-blend-mode: screen;
+      color: rgba(220,220,220,.78);
+      text-shadow: -1px 0 rgba(115,115,115,.42), 0 1px rgba(225,225,225,.16);
+      font-family: "Courier New", monospace;
+      font-size: .88rem;
+      letter-spacing: .22rem;
+      line-height: 1.2;
+      white-space: pre;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .scratch-clue::after {
+      content: "";
+      position: absolute;
+      inset: -4px;
+      background: repeating-linear-gradient(12deg, rgba(255,255,255,.07) 0, rgba(255,255,255,.07) 1px, transparent 1px, transparent 3px);
+      opacity: .26;
+      filter: blur(.2px);
+      pointer-events: none;
+    }
+
+    .scratch-clue.revealed {
+      opacity: .5;
+      text-shadow: -1px 0 rgba(140,140,140,.55), 0 0 8px rgba(210,210,210,.24);
+      filter: blur(.15px) contrast(1.12) brightness(1.08);
+    }
+
+    .scratch-inspect-hitbox {
+      position: absolute;
+      left: -42px;
+      top: 60%;
+      transform: translateY(-50%);
+      width: 74px;
+      height: 86px;
+      z-index: 2;
+      background: transparent;
+      border: 0;
+      padding: 0;
+      color: inherit;
+      cursor: help;
+    }
+
+    .scratch-tooltip {
+      position: absolute;
+      left: -10px;
+      top: calc(100% + 6px);
+      min-width: 180px;
+      max-width: 240px;
+      font-size: .74rem;
+      line-height: 1.3;
+      padding: .34rem .45rem;
+      border: 1px solid rgba(196,196,196,.35);
+      border-radius: 5px;
+      background: rgba(10,10,10,.95);
+      color: rgba(212,212,212,.93);
+      box-shadow: 0 4px 12px rgba(0,0,0,.45);
+      opacity: 0;
+      transform: translateY(4px);
+      transition: opacity .18s ease, transform .18s ease;
+      pointer-events: none;
+    }
+
+    .scratch-inspect-hitbox.show-tooltip .scratch-tooltip,
+    .scratch-inspect-hitbox:hover .scratch-tooltip,
+    .scratch-inspect-hitbox:focus-visible .scratch-tooltip {
+      opacity: 1;
+      transform: translateY(0);
     }
 
     .maintenance-hatch {
@@ -380,6 +448,12 @@
         min-width: 64px;
         font-size: 1.12rem;
       }
+      .scratch-clue {
+        left: -30px;
+      }
+      .scratch-inspect-hitbox {
+        left: -36px;
+      }
       body {
         padding-bottom: env(safe-area-inset-bottom);
       }
@@ -412,9 +486,16 @@
       </div>
 
       <div class="panel-zone">
-        <div class="scratch" id="scratchClue" title="Three drag marks around the panel"></div>
         <button id="maintenanceHatch" class="maintenance-hatch" aria-label="Maintenance hatch">SERVICE</button>
-        <div class="floor-grid" id="floorGrid"></div>
+        <div class="floor-grid-wrap">
+          <div class="scratch-clue" id="scratchClue" aria-hidden="true">4 /
+2 /
+9</div>
+          <button class="scratch-inspect-hitbox" id="scratchInspect" aria-label="Inspect old score marks">
+            <span class="scratch-tooltip" role="tooltip">Old scoring marks. Three numbers stand out.</span>
+          </button>
+          <div class="floor-grid" id="floorGrid"></div>
+        </div>
       </div>
 
       <div class="hint-strip">
@@ -490,6 +571,7 @@
       },
       flags: {
         scratchUnlocked: false,
+        scratchRevealed: false,
         descendUnlocked: false,
         goodEndingSeen: false,
         secretEndingSeen: false
@@ -527,6 +609,7 @@
       inspectModal: document.getElementById("inspectModal"),
       closeInspect: document.getElementById("closeInspect"),
       scratchClue: document.getElementById("scratchClue"),
+      scratchInspect: document.getElementById("scratchInspect"),
       maintenanceHatch: document.getElementById("maintenanceHatch"),
       codeModal: document.getElementById("codeModal"),
       keypadGrid: document.getElementById("keypadGrid"),
@@ -713,6 +796,18 @@
       els.flickerHint.textContent = flicker13Active ? "A seam glints near the lower-right panel." : "";
     }
 
+    function updateScratchClueUI() {
+      els.scratchClue.classList.toggle("revealed", state.flags.scratchRevealed);
+    }
+
+    function revealScratchClue() {
+      if (state.flags.scratchRevealed) return;
+      state.flags.scratchRevealed = true;
+      updateScratchClueUI();
+      log("Something etched near the panel catches the light.");
+      saveGame();
+    }
+
     function saveGame() {
       const persist = {
         fear: state.fear,
@@ -740,6 +835,7 @@
         state.currentFloor = Number(data.currentFloor) || 1;
         state.flags = {
           scratchUnlocked: !!data.flags?.scratchUnlocked,
+          scratchRevealed: !!data.flags?.scratchRevealed,
           descendUnlocked: !!data.flags?.descendUnlocked,
           goodEndingSeen: !!data.flags?.goodEndingSeen,
           secretEndingSeen: !!data.flags?.secretEndingSeen
@@ -752,6 +848,7 @@
         state.displayedFloor = String(state.currentFloor);
         log("You remember where the doors last opened.");
         updateAmbientHint();
+        updateScratchClueUI();
         updateMeters();
         els.muteBtn.textContent = `Sound: ${state.muted ? "MUTED" : "LIVE"}`;
         return true;
@@ -895,6 +992,7 @@
       flicker13Active = true;
       flickerLogPinned = true;
       updateMaintenanceHatchUI();
+      revealScratchClue();
       state.displayedFloor = "13";
       els.displayWrap.classList.add("flicker13-glow");
       els.display.classList.add("flicker13-rapid");
@@ -1150,6 +1248,7 @@
         },
         flags: {
           scratchUnlocked: false,
+          scratchRevealed: false,
           descendUnlocked: false,
           goodEndingSeen: false,
           secretEndingSeen: false
@@ -1171,6 +1270,7 @@
       els.blackout.classList.remove("active");
       setMode("IDLE");
       updateAmbientHint();
+      updateScratchClueUI();
       updateMeters();
       renderButtons();
       log("Cab reset. The lights hesitate before staying on.");
@@ -1199,7 +1299,27 @@
         saveGame();
       });
 
-      els.scratchClue.addEventListener("click", handleScratchClue);
+      els.scratchInspect.addEventListener("click", handleScratchClue);
+      els.scratchInspect.addEventListener("mouseenter", handleScratchClue, { once: true });
+      let scratchHoldTimer = null;
+      const clearScratchHold = () => {
+        if (scratchHoldTimer) {
+          clearTimeout(scratchHoldTimer);
+          scratchHoldTimer = null;
+        }
+        els.scratchInspect.classList.remove("show-tooltip");
+      };
+      els.scratchInspect.addEventListener("pointerdown", (e) => {
+        if (e.pointerType === "mouse") return;
+        clearScratchHold();
+        scratchHoldTimer = setTimeout(() => {
+          els.scratchInspect.classList.add("show-tooltip");
+          handleScratchClue();
+        }, 450);
+      });
+      ["pointerup", "pointercancel", "pointerleave"].forEach((eventName) => {
+        els.scratchInspect.addEventListener(eventName, clearScratchHold);
+      });
       els.maintenanceHatch.addEventListener("click", onHatchClick);
 
       els.keypadGrid.addEventListener("click", (e) => {
@@ -1228,6 +1348,7 @@
       bindEvents();
       renderButtons();
       updateAmbientHint();
+      updateScratchClueUI();
       updateCodeDisplay();
       els.continueBtn.disabled = !hasSave();
       log("Service starts. Someone has scratched numbers into the panel edge.");
