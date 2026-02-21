@@ -224,6 +224,23 @@
       padding: 1rem;
     }
     .modal.active, .ending.active { display: flex; }
+    .ending {
+      pointer-events: none;
+      overflow: hidden;
+    }
+    .ending-effect {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background: repeating-radial-gradient(circle at center, rgba(255,0,0,.16), rgba(255,0,0,.16) 10px, rgba(0,0,0,.88) 12px, rgba(0,0,0,.88) 24px);
+      animation: flicker 0.16s infinite;
+    }
+    .ending-modal {
+      position: relative;
+      z-index: 1;
+      pointer-events: auto;
+    }
     .card {
       width: min(560px, 94vw);
       background: #141414;
@@ -245,6 +262,7 @@
       text-shadow: 0 0 20px #ff001f;
       letter-spacing: .2rem;
       animation: flicker 0.16s infinite;
+      pointer-events: none;
     }
     .jump.active { display: flex; }
 
@@ -318,7 +336,8 @@
   </div>
 
   <div class="ending" id="ending">
-    <div class="card" id="endingCard"></div>
+    <div class="ending-effect" aria-hidden="true"></div>
+    <div class="card ending-modal" id="endingCard"></div>
   </div>
 
   <div class="jump" id="jump">WELCOME HOME</div>
