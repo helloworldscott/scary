@@ -160,6 +160,29 @@
       position: relative;
       isolation: isolate;
     }
+    .three-panel {
+      width: 100%;
+      height: 320px;
+      border: 1px solid #3f3f3f;
+      border-radius: 10px;
+      background: radial-gradient(circle at center, #141414, #0b0b0b 70%);
+      overflow: hidden;
+      position: relative;
+    }
+    .three-panel canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none;
+    }
+    .floor-grid {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      opacity: 0;
+      pointer-events: none;
+    }
     .floor-btn {
       min-height: 56px;
       min-width: 56px;
@@ -375,6 +398,7 @@
       .right { display: block; padding-top: .55rem; }
       .top-controls-buttons { display: none; }
       .panel-zone { min-height: 0; padding: .55rem; }
+      .three-panel { height: 250px; }
       .floor-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .45rem; }
       .floor-btn { min-height: 44px; min-width: 44px; font-size: 1rem; }
       .maintenance-hatch { position: static; width: 100%; height: 36px; margin-top: .5rem; font-size: .66rem; opacity: .8; }
@@ -426,6 +450,7 @@
       <div class="panel-zone">
         <button id="maintenanceHatch" class="maintenance-hatch" aria-label="Maintenance hatch">SERVICE</button>
         <div class="floor-grid-wrap">
+          <div class="three-panel" id="threePanel" aria-label="3D elevator button panel"></div>
           <div class="floor-grid" id="floorGrid"></div>
         </div>
       </div>
@@ -495,6 +520,7 @@
     <source src="assets/audio/elevator_music.mp3" type="audio/mpeg">
   </audio>
 
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
   <script>
     const floors = Array.from({ length: 13 }, (_, i) => ({ id: i + 1, label: String(i + 1) }));
     // checkSequences() and sequence definitions
@@ -553,6 +579,7 @@
       displayWrap: document.getElementById("displayWrap"),
       narration: document.getElementById("narration"),
       floorGrid: document.getElementById("floorGrid"),
+      threePanel: document.getElementById("threePanel"),
       doors: document.getElementById("doors"),
       meters: document.getElementById("meters"),
       stateLabel: document.getElementById("stateLabel"),
@@ -588,6 +615,122 @@
       endingCard: document.getElementById("endingCard"),
       bgAmbience: document.getElementById("bgAmbience")
     };
+
+    const threeState = {
+      renderer: null,
+      scene: null,
+      camera: null,
+      ambientLight: null,
+      buttonMeshes: new Map(),
+      raycaster: new THREE.Raycaster(),
+      pointer: new THREE.Vector2(),
+      audioListener: null,
+      ambientAudio: null,
+      flickerSeed: Math.random() * Math.PI,
+      frameHandle: null
+    };
+
+    function isFloorInputLocked() {
+      return state.gameState !== "IDLE" || maintenanceModalOpen || settingsMenuOpen || !state.alive;
+    }
+
+    function handleFloorSelection(floor) {
+      if (isFloorInputLocked()) return;
+      recordPress(floor);
+      checkSequences();
+      startTravel(floor);
+    }
+
+    function initThreeScene() {
+      if (!els.threePanel || !window.THREE) return;
+      const lowPower = window.matchMedia("(max-width: 720px)").matches;
+      threeState.scene = new THREE.Scene();
+      threeState.scene.background = new THREE.Color(0x090909);
+
+      threeState.camera = new THREE.PerspectiveCamera(52, 1, 0.1, 40);
+      threeState.camera.position.set(0, 1.6, 4.4);
+      threeState.camera.lookAt(0, 1.4, 0);
+
+      threeState.renderer = new THREE.WebGLRenderer({ antialias: !lowPower, alpha: false, powerPreference: "low-power" });
+      threeState.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, lowPower ? 1.25 : 1.5));
+      threeState.renderer.setSize(els.threePanel.clientWidth, els.threePanel.clientHeight, false);
+      els.threePanel.appendChild(threeState.renderer.domElement);
+
+      const wallMat = new THREE.MeshStandardMaterial({ color: 0x1c1c1f, roughness: 0.94, metalness: 0.08 });
+      const floorMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 1 });
+      const panelMat = new THREE.MeshStandardMaterial({ color: 0x24242a, roughness: 0.7, metalness: 0.2 });
+
+      const room = new THREE.Mesh(new THREE.BoxGeometry(9, 5.5, 8), wallMat);
+      room.material.side = THREE.BackSide;
+      room.position.set(0, 2.75, 0);
+      threeState.scene.add(room);
+
+      const floor = new THREE.Mesh(new THREE.PlaneGeometry(9, 8), floorMat);
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.y = 0.02;
+      threeState.scene.add(floor);
+
+      const panel = new THREE.Mesh(new THREE.BoxGeometry(3.2, 3.8, 0.25), panelMat);
+      panel.position.set(0, 1.8, 0.25);
+      threeState.scene.add(panel);
+
+      const buttonMat = new THREE.MeshStandardMaterial({ color: 0x444851, roughness: 0.4, metalness: 0.35, emissive: 0x000000 });
+      const cols = 3;
+      const spacingX = 0.88;
+      const spacingY = 0.72;
+      floors.forEach((f, idx) => {
+        const button = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.08, 14), buttonMat.clone());
+        const col = idx % cols;
+        const row = Math.floor(idx / cols);
+        button.rotation.x = Math.PI / 2;
+        button.position.set((col - 1) * spacingX, 2.95 - row * spacingY, 0.42);
+        button.userData.floor = f.id;
+        threeState.scene.add(button);
+        threeState.buttonMeshes.set(f.id, button);
+      });
+
+      threeState.ambientLight = new THREE.AmbientLight(0x8ea0b8, 0.62);
+      const panelLight = new THREE.PointLight(0xffdcb0, 0.6, 9, 2);
+      panelLight.position.set(0, 3.7, 2.4);
+      threeState.scene.add(threeState.ambientLight, panelLight);
+
+      threeState.audioListener = new THREE.AudioListener();
+      threeState.camera.add(threeState.audioListener);
+      threeState.ambientAudio = new THREE.Audio(threeState.audioListener);
+      threeState.ambientAudio.setMediaElementSource(els.bgAmbience);
+      threeState.ambientAudio.setLoop(true);
+
+      const onPointer = (event) => {
+        const bounds = threeState.renderer.domElement.getBoundingClientRect();
+        threeState.pointer.x = ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
+        threeState.pointer.y = -((event.clientY - bounds.top) / bounds.height) * 2 + 1;
+        threeState.raycaster.setFromCamera(threeState.pointer, threeState.camera);
+        const hits = threeState.raycaster.intersectObjects([...threeState.buttonMeshes.values()], false);
+        if (!hits.length) return;
+        const floorId = hits[0].object.userData.floor;
+        if (typeof floorId === "number") handleFloorSelection(floorId);
+      };
+      threeState.renderer.domElement.addEventListener("pointerdown", onPointer);
+
+      const onResize = () => {
+        if (!threeState.renderer || !els.threePanel) return;
+        const w = els.threePanel.clientWidth;
+        const h = els.threePanel.clientHeight;
+        threeState.camera.aspect = w / Math.max(h, 1);
+        threeState.camera.updateProjectionMatrix();
+        threeState.renderer.setSize(w, h, false);
+      };
+      window.addEventListener("resize", onResize);
+      onResize();
+
+      const animate = (time) => {
+        const flicker = 0.54 + Math.sin(time * 0.0021 + threeState.flickerSeed) * 0.05 + (Math.random() - 0.5) * 0.035;
+        if (threeState.ambientLight) threeState.ambientLight.intensity = flicker13Active ? flicker * 0.9 : flicker;
+        threeState.renderer.render(threeState.scene, threeState.camera);
+        threeState.frameHandle = requestAnimationFrame(animate);
+      };
+      threeState.frameHandle = requestAnimationFrame(animate);
+    }
 
     function ensureAudioContext() {
       if (audioCtx) return audioCtx;
@@ -816,7 +959,7 @@
       els.meters.textContent = `Fear ${state.fear} | Suspicion ${state.suspicion}`;
       els.display.textContent = state.displayedFloor;
       document.querySelectorAll(".floor-btn").forEach((btn) => {
-        btn.disabled = state.gameState !== "IDLE" || maintenanceModalOpen || settingsMenuOpen || !state.alive;
+        btn.disabled = isFloorInputLocked();
       });
       updateMaintenanceHatchUI();
     }
@@ -894,12 +1037,7 @@
         b.className = "floor-btn";
         b.textContent = f.label;
         b.dataset.floor = String(f.id);
-        b.addEventListener("click", () => {
-          if (state.gameState !== "IDLE" || maintenanceModalOpen || settingsMenuOpen || !state.alive) return;
-          recordPress(f.id);
-          checkSequences(); // checkSequences()
-          startTravel(f.id);
-        });
+        b.addEventListener("click", () => handleFloorSelection(f.id));
         els.floorGrid.appendChild(b);
       });
       updateMeters();
@@ -938,6 +1076,9 @@
 
     function updateRecentHitButton(floor) {
       document.querySelectorAll(".floor-btn").forEach((btn) => btn.classList.toggle("recent-hit", Number(btn.dataset.floor) === floor));
+      threeState.buttonMeshes.forEach((mesh, id) => {
+        mesh.material.emissive.setHex(id === floor ? 0x6b0f1f : 0x000000);
+      });
     }
 
     function runPatternSequenceReward() {
@@ -1434,6 +1575,7 @@
     }
 
     function init() {
+      initThreeScene();
       initAudioOnFirstInteraction();
       bindEvents();
       renderButtons();
