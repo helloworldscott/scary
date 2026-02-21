@@ -45,6 +45,8 @@
     }
 
     .left, .right { padding: 1.1rem; position: relative; }
+    .mobile-gear { display: none; }
+    .mobile-hint-strip { display: none; }
     .left { grid-area: left; }
     .right { grid-area: right; }
     .left { border-right: 1px solid #2f2f2f; }
@@ -110,7 +112,8 @@
       font-size: .9rem;
       line-height: 1.35;
     }
-    .logline { margin: 0 0 .36rem; opacity: .95; }
+    .logline { margin: 0; opacity: .95; padding: .42rem .58rem; border: 1px solid #2f2f2f; border-radius: 10px; background: linear-gradient(180deg, #1a1a1a, #131313); }
+    .logline + .logline { margin-top: .4rem; }
 
     .right {
       display: grid;
@@ -340,51 +343,54 @@
     }
 
     .hidden { display: none; }
+    .settings-sheet-card { width: min(420px, 96vw); }
+    .settings-sheet-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: .7rem; }
+    .settings-sheet-actions { display: grid; gap: .5rem; }
 
     /* MOBILE layout CSS/media queries */
-    @media (max-width: 899px) {
-      html, body { height: auto; min-height: 100%; }
+    @media (max-width: 520px) {
+      html, body {
+        width: 100%;
+        height: calc(var(--vh, 1vh) * 100);
+        overflow: hidden;
+      }
+      body { padding-bottom: env(safe-area-inset-bottom); }
       .app {
-        min-height: 100dvh;
-        height: auto;
-        overflow: auto;
+        height: calc(var(--vh, 1vh) * 100);
         grid-template-columns: 1fr;
-        grid-template-rows: auto auto auto;
+        grid-template-rows: auto 1fr auto;
         grid-template-areas:
           "left"
           "right"
           "log";
       }
-      .left, .right {
-        border-right: 0;
-        border-bottom: 1px solid #2f2f2f;
-        padding: .9rem;
-      }
-      .right {
-        grid-template-rows: auto 1fr auto;
-        gap: .8rem;
-      }
-      .top-controls { justify-content: flex-start; }
+      .left, .right { border-right: 0; padding: .6rem .65rem; }
+      .left { border-bottom: 1px solid #2a2a2a; }
+      .display-wrap { margin-bottom: 0; padding: .7rem .7rem .6rem; }
+      .display { font-size: clamp(2rem, 13vw, 3.4rem); min-height: 3.4rem; }
+      .status { margin-top: .3rem; font-size: .78rem; gap: .4rem; }
+      .doors { display: none; }
+      .mobile-gear { display: inline-flex; position: absolute; top: .85rem; right: .85rem; width: 2rem; height: 2rem; align-items: center; justify-content: center; padding: 0; }
+      .mobile-hint-strip { display: block; margin-top: .45rem; border-top: 1px dashed #3d3d3d; padding-top: .45rem; font-size: .82rem; color: #b8b8b8; line-height: 1.25; min-height: 2.1rem; }
+      .right { display: block; padding-top: .55rem; }
+      .top-controls-buttons { display: none; }
+      .panel-zone { min-height: 0; padding: .55rem; }
+      .floor-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .45rem; }
+      .floor-btn { min-height: 44px; min-width: 44px; font-size: 1rem; }
+      .maintenance-hatch { position: static; width: 100%; height: 36px; margin-top: .5rem; font-size: .66rem; opacity: .8; }
+      .hint-strip { display: none; }
       .narration {
-        margin: .9rem;
-        min-height: 24vh;
+        margin: .55rem .65rem .65rem;
+        height: 25vh;
+        min-height: 22vh;
         max-height: 28vh;
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
+        border-radius: 12px;
+        background: #0f0f0f;
       }
-      /* floor button sizing rules for mobile */
-      .floor-grid {
-        grid-template-columns: repeat(3, minmax(72px, 1fr));
-        gap: .85rem;
-      }
-      .floor-btn {
-        min-height: 64px;
-        min-width: 64px;
-        font-size: 1.12rem;
-      }
-      body {
-        padding-bottom: env(safe-area-inset-bottom);
-      }
+      .modal.settings-modal.active { align-items: flex-end; }
+      .modal.settings-modal .card { border-radius: 14px 14px 0 0; padding-bottom: calc(.9rem + env(safe-area-inset-bottom)); }
     }
   </style>
 </head>
@@ -392,11 +398,13 @@
   <div class="app" id="app">
     <div class="left">
       <div class="display-wrap" id="displayWrap">
+        <button id="gearBtn" class="mobile-gear" aria-label="Open settings">⚙</button>
         <div class="display" id="display">1</div>
         <div class="status">
           <span id="stateLabel">STATE: IDLE</span>
           <span id="meters">Fear 0 | Suspicion 0</span>
         </div>
+        <div class="mobile-hint-strip" id="mobileHintStrip">The cab remembers patterns better than people.</div>
       </div>
       <div class="doors" id="doors">
         <div class="door left"></div>
@@ -406,11 +414,13 @@
 
     <div class="right">
       <div class="top-controls">
-        <button id="newBtn">New Game</button>
-        <button id="continueBtn">Continue</button>
-        <button id="muteBtn">Sound: MUTED</button>
-        <button id="inspectBtn">Inspection Certificate</button>
-        <button id="restartBtn">Restart</button>
+        <div class="top-controls-buttons">
+          <button id="newBtn">New Game</button>
+          <button id="continueBtn">Continue</button>
+          <button id="muteBtn">Sound: MUTED</button>
+          <button id="inspectBtn">Inspection Certificate</button>
+          <button id="restartBtn">Restart</button>
+        </div>
       </div>
 
       <div class="panel-zone">
@@ -430,6 +440,22 @@
   </div>
 
   <div class="blackout" id="blackout"></div>
+
+  <div class="modal settings-modal" id="settingsModal" aria-hidden="true">
+    <div class="card settings-sheet-card">
+      <div class="settings-sheet-header">
+        <h3 style="margin:0;">Settings</h3>
+        <button id="closeSettings" aria-label="Close settings">✕</button>
+      </div>
+      <div class="settings-sheet-actions">
+        <button id="menuNewBtn">New Game</button>
+        <button id="menuContinueBtn">Continue</button>
+        <button id="menuRestartBtn">Restart</button>
+        <button id="menuInspectBtn">Inspection Certificate</button>
+        <button id="menuMuteBtn">Sound: MUTED</button>
+      </div>
+    </div>
+  </div>
 
   <div class="modal" id="inspectModal" aria-hidden="true">
     <div class="card">
@@ -509,6 +535,7 @@
 
     let flicker13Active = false;
     let maintenanceModalOpen = false;
+    let settingsMenuOpen = false;
     let flickerLogPinned = false;
     let panelPulseTimer = null;
     let audioCtx;
@@ -529,6 +556,15 @@
       doors: document.getElementById("doors"),
       meters: document.getElementById("meters"),
       stateLabel: document.getElementById("stateLabel"),
+      mobileHintStrip: document.getElementById("mobileHintStrip"),
+      gearBtn: document.getElementById("gearBtn"),
+      settingsModal: document.getElementById("settingsModal"),
+      closeSettings: document.getElementById("closeSettings"),
+      menuNewBtn: document.getElementById("menuNewBtn"),
+      menuContinueBtn: document.getElementById("menuContinueBtn"),
+      menuRestartBtn: document.getElementById("menuRestartBtn"),
+      menuInspectBtn: document.getElementById("menuInspectBtn"),
+      menuMuteBtn: document.getElementById("menuMuteBtn"),
       ambientHint: document.getElementById("ambientHint"),
       flickerHint: document.getElementById("flickerHint"),
       continueBtn: document.getElementById("continueBtn"),
@@ -756,16 +792,18 @@
     function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
     function log(text, sticky = false) {
+      const nearBottom = els.narration.scrollHeight - els.narration.scrollTop - els.narration.clientHeight < 36;
       const p = document.createElement("p");
       p.className = "logline";
-      p.textContent = `• ${text}`;
+      p.textContent = text;
       if (sticky) p.dataset.sticky = "true";
-      els.narration.prepend(p);
+      els.narration.appendChild(p);
       while (els.narration.children.length > 30) {
-        const last = els.narration.lastElementChild;
-        if (last && last.dataset.sticky === "true") break;
-        els.narration.removeChild(last);
+        const first = els.narration.firstElementChild;
+        if (!first || first.dataset.sticky === "true") break;
+        els.narration.removeChild(first);
       }
+      if (nearBottom) els.narration.scrollTop = els.narration.scrollHeight;
       return p;
     }
 
@@ -778,7 +816,7 @@
       els.meters.textContent = `Fear ${state.fear} | Suspicion ${state.suspicion}`;
       els.display.textContent = state.displayedFloor;
       document.querySelectorAll(".floor-btn").forEach((btn) => {
-        btn.disabled = state.gameState !== "IDLE" || maintenanceModalOpen || !state.alive;
+        btn.disabled = state.gameState !== "IDLE" || maintenanceModalOpen || settingsMenuOpen || !state.alive;
       });
       updateMaintenanceHatchUI();
     }
@@ -801,6 +839,7 @@
       };
       localStorage.setItem("elevator13-save", JSON.stringify(persist));
       els.continueBtn.disabled = false;
+      syncMenuButtonState();
     }
 
     function hasSave() {
@@ -833,6 +872,7 @@
         updateAmbientHint();
         updateMeters();
         els.muteBtn.textContent = `Sound: ${state.muted ? "MUTED" : "LIVE"}`;
+        syncMenuButtonState();
         if (state.muted) pauseAmbienceForMute();
         else if (audioUnlocked) resumeAmbienceIfAllowed();
         return true;
@@ -844,6 +884,7 @@
     function clearSave() {
       localStorage.removeItem("elevator13-save");
       els.continueBtn.disabled = true;
+      syncMenuButtonState();
     }
 
     function renderButtons() {
@@ -854,7 +895,7 @@
         b.textContent = f.label;
         b.dataset.floor = String(f.id);
         b.addEventListener("click", () => {
-          if (state.gameState !== "IDLE" || maintenanceModalOpen || !state.alive) return;
+          if (state.gameState !== "IDLE" || maintenanceModalOpen || settingsMenuOpen || !state.alive) return;
           recordPress(f.id);
           checkSequences(); // checkSequences()
           startTravel(f.id);
@@ -867,9 +908,11 @@
     function updateAmbientHint() {
       if (state.flags.patternUnlocked) {
         els.ambientHint.textContent = "Now prove you can go down.";
+        els.mobileHintStrip.textContent = "Now prove you can go down.";
         return;
       }
       els.ambientHint.textContent = "The cab remembers patterns better than people.";
+      els.mobileHintStrip.textContent = "The cab remembers patterns better than people.";
     }
 
     function recordPress(floor) {
@@ -932,6 +975,31 @@
         triggerBadEnding(); // ending triggers
       }
     }
+    function syncMenuButtonState() {
+      els.menuContinueBtn.disabled = els.continueBtn.disabled;
+      els.menuMuteBtn.textContent = els.muteBtn.textContent;
+    }
+
+    function openSettingsMenu() {
+      settingsMenuOpen = true;
+      els.settingsModal.classList.add("active");
+      els.settingsModal.setAttribute("aria-hidden", "false");
+      syncMenuButtonState();
+      updateMeters();
+    }
+
+    function closeSettingsMenu() {
+      settingsMenuOpen = false;
+      els.settingsModal.classList.remove("active");
+      els.settingsModal.setAttribute("aria-hidden", "true");
+      updateMeters();
+    }
+
+    function setViewportHeightVar() {
+      const vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty("--vh", `${vh}px`);
+    }
+
 
     function inspectCertificate() {
       els.inspectModal.classList.add("active");
@@ -1054,7 +1122,7 @@
     }
 
     async function startTravel(target) {
-      if (state.gameState !== "IDLE" || maintenanceModalOpen || !state.alive) return;
+      if (state.gameState !== "IDLE" || maintenanceModalOpen || settingsMenuOpen || !state.alive) return;
       playTick();
       setMode("TRAVEL");
       state.suspicion = Math.min(100, state.suspicion + 2);
@@ -1302,6 +1370,21 @@
     }
 
     function bindEvents() {
+      setViewportHeightVar();
+      window.addEventListener("resize", setViewportHeightVar);
+      window.addEventListener("orientationchange", setViewportHeightVar);
+
+      els.gearBtn.addEventListener("click", openSettingsMenu);
+      els.closeSettings.addEventListener("click", closeSettingsMenu);
+      els.settingsModal.addEventListener("click", (e) => {
+        if (e.target === els.settingsModal) closeSettingsMenu();
+      });
+      els.menuNewBtn.addEventListener("click", () => { els.newBtn.click(); closeSettingsMenu(); });
+      els.menuContinueBtn.addEventListener("click", () => { if (!els.menuContinueBtn.disabled) { els.continueBtn.click(); closeSettingsMenu(); } });
+      els.menuRestartBtn.addEventListener("click", () => { els.restartBtn.click(); closeSettingsMenu(); });
+      els.menuInspectBtn.addEventListener("click", () => { els.inspectBtn.click(); closeSettingsMenu(); });
+      els.menuMuteBtn.addEventListener("click", () => els.muteBtn.click());
+
       els.newBtn.addEventListener("click", () => resetGame(true));
       els.restartBtn.addEventListener("click", () => resetGame(true));
       els.continueBtn.addEventListener("click", () => {
@@ -1323,6 +1406,7 @@
         if (state.muted) pauseAmbienceForMute();
         else if (audioUnlocked) resumeAmbienceIfAllowed();
         els.muteBtn.textContent = `Sound: ${state.muted ? "MUTED" : "LIVE"}`;
+        syncMenuButtonState();
         saveGame();
       });
 
@@ -1356,6 +1440,7 @@
       updateAmbientHint();
       updateCodeDisplay();
       els.continueBtn.disabled = !hasSave();
+      syncMenuButtonState();
       log("Service starts. The display warms up slower than it should.");
       if (hasSave()) {
         log("A stale entry waits in memory. Continue if you trust it.");
