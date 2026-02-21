@@ -284,7 +284,7 @@
 
     .modal {
       background: rgba(0,0,0,.7);
-      z-index: 120;
+      z-index: 150;
       pointer-events: none;
     }
     .modal.active {
@@ -413,7 +413,7 @@
 
       <div class="panel-zone">
         <div class="scratch" id="scratchClue" title="Three drag marks around the panel"></div>
-        <button id="maintenanceHatch" class="maintenance-hatch" aria-label="Maintenance hatch">service</button>
+        <button id="maintenanceHatch" class="maintenance-hatch" aria-label="Maintenance hatch">SERVICE</button>
         <div class="floor-grid" id="floorGrid"></div>
       </div>
 
@@ -433,7 +433,7 @@
       <h3 style="margin-top:0;">Inspection Certificate</h3>
       <p>Certified route update logged at <strong>04-29 23:40</strong>.</p>
       <p>Post-midnight recall note: “descending check, then lobby release.”</p>
-      <p style="opacity:.8;font-size:.9rem;">Handwritten beneath the seal: “Split time into floors. Keep what this car can carry.”</p>
+      <p style="opacity:.8;font-size:.9rem;">Handwritten beneath the seal: “Split time into floors. Keep what this car can carry. Hold the unit.”</p>
       <button id="closeInspect">Close</button>
     </div>
   </div>
@@ -464,12 +464,13 @@
   <script>
     const floors = Array.from({ length: 13 }, (_, i) => ({ id: i + 1, label: String(i + 1) }));
     // checkSequences() and sequence definitions
-    const RECENT_PRESS_LIMIT = 8;
+    const RECENT_PRESS_LIMIT = 10;
     const SCRATCH_SEQUENCE = [4, 2, 9];
-    const DESCENDING_CHECK_SEQUENCE = [4, 3, 2, 1];
+    const DESCENDING_CHECK_SEQUENCE = [9, 4, 2, 1];
+    const SERVICE_CODE = "2347";
 
     const state = {
-      mode: "IDLE",
+      gameState: "IDLE",
       currentFloor: 1,
       displayedFloor: "1",
       fear: 0,
@@ -488,7 +489,10 @@
         scratchesSequenceDone: false
       },
       flags: {
-        scratchSequenceDone: false
+        scratchUnlocked: false,
+        descendUnlocked: false,
+        goodEndingSeen: false,
+        secretEndingSeen: false
       },
       foundDigits: { scratch: null, cert: null, intercom: null, serial: null },
       endingsAchieved: { good: false, bad: false, secret: false },
@@ -689,7 +693,7 @@
     }
 
     function setMode(mode) {
-      state.mode = mode;
+      state.gameState = mode;
       els.stateLabel.textContent = `STATE: ${mode}`;
     }
 
@@ -697,7 +701,7 @@
       els.meters.textContent = `Fear ${state.fear} | Suspicion ${state.suspicion}`;
       els.display.textContent = state.displayedFloor;
       document.querySelectorAll(".floor-btn").forEach((btn) => {
-        btn.disabled = state.mode !== "IDLE" || maintenanceModalOpen || !state.alive;
+        btn.disabled = state.gameState !== "IDLE" || maintenanceModalOpen || !state.alive;
       });
       updateMaintenanceHatchUI();
     }
@@ -710,7 +714,15 @@
     }
 
     function saveGame() {
-      localStorage.setItem("elevator13-save", JSON.stringify(state));
+      const persist = {
+        fear: state.fear,
+        suspicion: state.suspicion,
+        currentFloor: state.currentFloor,
+        flags: state.flags,
+        recentPresses: state.recentPresses,
+        muted: state.muted
+      };
+      localStorage.setItem("elevator13-save", JSON.stringify(persist));
       els.continueBtn.disabled = false;
     }
 
@@ -723,12 +735,17 @@
       if (!raw) return false;
       try {
         const data = JSON.parse(raw);
-        Object.assign(state, data);
-        if (!Array.isArray(state.recentPresses)) state.recentPresses = Array.isArray(state.pressedHistory) ? state.pressedHistory.slice(-RECENT_PRESS_LIMIT) : [];
-        state.recentPresses = state.recentPresses.slice(-RECENT_PRESS_LIMIT);
-        if (typeof state.calmRidesRemaining !== "number") state.calmRidesRemaining = 0;
-        if (!state.flags) state.flags = { scratchSequenceDone: !!state.clueFound?.scratchesSequenceDone };
-        if (typeof state.flags.scratchSequenceDone !== "boolean") state.flags.scratchSequenceDone = !!state.clueFound?.scratchesSequenceDone;
+        state.fear = Number(data.fear) || 0;
+        state.suspicion = Number(data.suspicion) || 0;
+        state.currentFloor = Number(data.currentFloor) || 1;
+        state.flags = {
+          scratchUnlocked: !!data.flags?.scratchUnlocked,
+          descendUnlocked: !!data.flags?.descendUnlocked,
+          goodEndingSeen: !!data.flags?.goodEndingSeen,
+          secretEndingSeen: !!data.flags?.secretEndingSeen
+        };
+        state.recentPresses = Array.isArray(data.recentPresses) ? data.recentPresses.slice(-RECENT_PRESS_LIMIT) : [];
+        state.muted = !!data.muted;
         setMode("IDLE");
         state.alive = true;
         state.ending = null;
@@ -755,20 +772,30 @@
         b.className = "floor-btn";
         b.textContent = f.label;
         b.dataset.floor = String(f.id);
-        b.addEventListener("click", () => onFloorPress(f.id));
+        b.addEventListener("click", () => {
+          if (state.gameState !== "IDLE" || maintenanceModalOpen || !state.alive) return;
+          recordPress(f.id);
+          checkSequences(); // checkSequences()
+          startTravel(f.id);
+        });
         els.floorGrid.appendChild(b);
       });
       updateMeters();
     }
 
     function updateAmbientHint() {
-      if (state.clueFound.scratchesSequenceDone) {
-        if (Math.random() > 0.45) {
-          els.ambientHint.textContent = "Down. Down. Don't look up.";
-          return;
-        }
+      if (state.flags.scratchUnlocked) {
+        els.ambientHint.textContent = "Now prove you can go down.";
+        return;
       }
       els.ambientHint.textContent = "The cab remembers patterns better than people.";
+    }
+
+    function recordPress(floor) {
+      state.recentPresses.push(floor);
+      if (state.recentPresses.length > RECENT_PRESS_LIMIT) state.recentPresses.shift();
+      updateRecentHitButton(floor);
+      saveGame();
     }
 
     function matchesRecentSequence(sequence) {
@@ -790,40 +817,38 @@
     }
 
     function runScratchSequenceReward() {
-      if (state.flags.scratchSequenceDone) return;
-      state.flags.scratchSequenceDone = true;
-      state.clueFound.scratchesSequenceDone = true;
-      state.calmRidesRemaining = 2;
+      if (state.flags.scratchUnlocked) return;
+      state.flags.scratchUnlocked = true;
+      state.calmRidesRemaining = 3;
       log("The cab remembers patterns better than people.");
-      if (!state.clueFound.serialSeen) {
-        log("A hidden etch appears by the hinge: INSPECTION SERIAL: MX-73A.");
-        state.foundDigits.serial = "3";
-        state.clueFound.serialSeen = true;
-      }
+      log("Now prove you can go down.");
       pulseDisplayOnce();
+      saveGame();
     }
 
     function runDescendingCheckOutcome() {
       pulseDisplayOnce();
       if (state.fear <= 40 && !state.ending) {
-        triggerEnding("good");
+        state.flags.descendUnlocked = true;
+        triggerGoodEnding(); // ending triggers
         return;
       }
       log("Too loud in your chest. Try again calmer.");
     }
 
+    // checkSequences()
     function checkSequences() {
       if (matchesRecentSequence(SCRATCH_SEQUENCE)) {
         runScratchSequenceReward();
       }
-      if (matchesRecentSequence(DESCENDING_CHECK_SEQUENCE)) {
+      if (state.flags.scratchUnlocked && matchesRecentSequence(DESCENDING_CHECK_SEQUENCE)) {
         runDescendingCheckOutcome();
       }
     }
 
-    function maybeDanger() {
-      if (state.suspicion >= 85 || state.fear >= 100) {
-        triggerEnding("bad");
+    function maybeDanger(lastPressedFloor = null) {
+      if (state.fear >= 100 || (lastPressedFloor === 13 && state.suspicion >= 60)) {
+        triggerBadEnding(); // ending triggers
       }
     }
 
@@ -831,8 +856,6 @@
       log("Scratches catch your nail: 4 / 2 / 9.");
       if (!state.clueFound.scratchesSeen) {
         state.clueFound.scratchesSeen = true;
-        // clue digit extraction rules: scratches source => take the middle value from 4/2/9 => digit 2.
-        state.foundDigits.scratch = "2";
       }
       updateAmbientHint();
       updateMeters();
@@ -844,8 +867,6 @@
       els.inspectModal.setAttribute("aria-hidden", "false");
       if (!state.clueFound.certSeen) {
         state.clueFound.certSeen = true;
-        // clue digit extraction rules: certificate source 04-29 23:40 => "month bleeds into the panel" => use month's second digit => 4.
-        state.foundDigits.cert = "4";
         saveGame();
       }
     }
@@ -858,16 +879,14 @@
     function intercomEvent() {
       state.messageLevel += 1;
       playFlickerSpark();
-      log('Intercom: "Unit S-7 keeps stuttering... s-sev... seven... hold."');
+      log('Intercom: "Unit S-7… seven… hold."');
       if (!state.clueFound.intercomSeen) {
         state.clueFound.intercomSeen = true;
-        // clue digit extraction rules: intercom source => repeated spoken stutter "seven" contributes digit 7.
-        state.foundDigits.intercom = "7";
         saveGame();
       }
     }
 
-    // flicker13Active timing
+    // flicker13Active
     async function forcedThirteenFlicker() {
       const old = state.displayedFloor;
       const activeDuration = 2500 + Math.floor(Math.random() * 1001);
@@ -881,7 +900,7 @@
       els.display.classList.add("flicker13-rapid");
       playFlickerSpark();
       startMaintenanceAlivePulse();
-      const pinnedLine = log("The floor display twitches to 13 and refuses to blink naturally.", true);
+      const pinnedLine = log("The display stutters. For a heartbeat, it reads 13.", true);
 
       setTimeout(() => {
         if (!flicker13Active) return;
@@ -901,30 +920,24 @@
       updateMeters();
     }
 
-    async function randomTravelEvent() {
-      const roll = Math.random();
-      if (roll < 0.34) {
+    async function maybeRideEvents(target) {
+      if (state.flags.scratchUnlocked && Math.random() < 0.15) {
         await forcedThirteenFlicker();
-      } else if (roll < 0.58) {
-        intercomEvent();
-      } else if (roll < 0.72) {
-        els.blackout.classList.add("active");
-        log("Power dips. Something shifts behind the rear panel.");
-        state.fear = Math.min(100, state.fear + 9);
-        await sleep(900);
-        els.blackout.classList.remove("active");
+        return;
       }
-      maybeDanger();
+      if (target % 4 === 0) {
+        intercomEvent();
+      }
     }
 
-    async function onFloorPress(target) {
-      if (state.mode !== "IDLE" || maintenanceModalOpen || !state.alive) return;
+    async function startTravel(target) {
+      if (state.gameState !== "IDLE" || maintenanceModalOpen || !state.alive) return;
       playTick();
-      setMode("MOVING");
+      setMode("TRAVEL");
       state.suspicion = Math.min(100, state.suspicion + 2);
-      let fearDelta = target === 13 ? 10 : 1;
+      let fearDelta = target === 13 ? 10 : 4;
       if (state.calmRidesRemaining > 0) {
-        fearDelta = Math.max(0, fearDelta - 1);
+        fearDelta = Math.max(0, fearDelta - 2);
         state.calmRidesRemaining -= 1;
       }
       state.fear = Math.min(100, state.fear + fearDelta);
@@ -933,26 +946,20 @@
       await sleep(940);
       state.currentFloor = target;
       state.displayedFloor = String(target);
-      state.recentPresses.push(target);
-      if (state.recentPresses.length > RECENT_PRESS_LIMIT) state.recentPresses.shift();
-      updateRecentHitButton(target);
+      setMode("ARRIVAL");
       log(`Doors part at floor ${target}.`);
-      if (Math.random() < 0.42 || target === 13) {
-        await randomTravelEvent();
-      }
-      checkSequences();
-      setMode("IDLE");
+      await maybeRideEvents(target);
+      maybeDanger(target);
       els.doors.classList.remove("moving");
+      if (state.gameState !== "END") setMode("IDLE");
       updateAmbientHint();
       updateMeters();
       saveGame();
     }
 
     function getServiceCode() {
-      // build from subtle clues in fixed order: scratches, certificate, serial, intercom.
-      return `${state.foundDigits.scratch || ""}${state.foundDigits.cert || ""}${state.foundDigits.serial || ""}${state.foundDigits.intercom || ""}`;
+      return SERVICE_CODE;
     }
-
     function updateCodeDisplay() {
       const chars = codeBuffer.padEnd(4, "•").slice(0, 4).split("");
       els.codeDisplay.textContent = chars.join(" ");
@@ -980,6 +987,7 @@
     // keypad modal open/submit handlers
     function openCodeModal() {
       maintenanceModalOpen = true;
+      setMode("MODAL");
       lastFocusedElement = document.activeElement;
       codeBuffer = "";
       updateCodeDisplay();
@@ -1009,6 +1017,7 @@
         document.removeEventListener("keydown", focusTrapHandler);
         focusTrapHandler = null;
       }
+      if (state.gameState !== "END") setMode("IDLE");
       updateMeters();
       if (lastFocusedElement && typeof lastFocusedElement.focus === "function") {
         lastFocusedElement.focus();
@@ -1033,7 +1042,7 @@
       }
       if (codeBuffer === expected) {
         closeCodeModal();
-        triggerEnding("secret");
+        triggerSecretEnding();
       } else {
         log("ACCESS DENIED");
         state.fear = Math.min(100, state.fear + 15);
@@ -1052,6 +1061,18 @@
       openCodeModal();
     }
 
+    function triggerGoodEnding() { // ending triggers
+      triggerEnding("good");
+    }
+
+    function triggerBadEnding() { // ending triggers
+      triggerEnding("bad");
+    }
+
+    function triggerSecretEnding() { // ending triggers
+      triggerEnding("secret");
+    }
+
     function triggerEnding(type) {
       if (state.ending) return;
       state.ending = type;
@@ -1060,20 +1081,22 @@
       flicker13Active = false;
       stopMaintenanceAlivePulse();
       updateMaintenanceHatchUI();
-      setMode("ENDED");
+      setMode("END");
       let title = "";
       let body = "";
       if (type === "secret") {
         title = "SERVICE LADDER";
-        body = "You pry the hatch open and climb into a narrow maintenance shaft. The elevator keeps moving below you without a call.";
+        body = "You pull yourself into the shaft as the cab shudders below.";
         state.endingsAchieved.secret = true;
+        state.flags.secretEndingSeen = true;
       } else if (type === "good") {
-        title = "LOBBY";
-        body = "You follow the descending check exactly. At floor 1, locks cycle and the lobby doors slide open to rain and streetlight.";
+        title = "LOBBY RELEASED";
+        body = "The doors open to a quiet hallway. You don’t wait to see what’s behind you.";
         state.endingsAchieved.good = true;
+        state.flags.goodEndingSeen = true;
       } else {
-        title = "FLOOR 13";
-        body = "The cab rises when you asked to descend. The display settles on 13 and the doors open inward.";
+        title = "WELCOME HOME";
+        body = "The display hums like teeth behind glass. The cab does not intend to let go.";
         state.endingsAchieved.bad = true;
         playBadEndingDrone();
       }
@@ -1108,7 +1131,7 @@
     function resetGame(clear = false) {
       if (clear) clearSave();
       Object.assign(state, {
-        mode: "IDLE",
+        gameState: "IDLE",
         currentFloor: 1,
         displayedFloor: "1",
         fear: 0,
@@ -1126,7 +1149,10 @@
           scratchesSequenceDone: false
         },
         flags: {
-          scratchSequenceDone: false
+          scratchUnlocked: false,
+          descendUnlocked: false,
+          goodEndingSeen: false,
+          secretEndingSeen: false
         },
         foundDigits: { scratch: null, cert: null, intercom: null, serial: null },
         endingsAchieved: { good: false, bad: false, secret: false },
