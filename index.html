@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Elevator to Floor 13</title>
+  <style>
+    :root {
+      --bg: #090909;
+      --panel: #161616;
+      --metal: #2a2a2a;
+      --text: #e7e7e7;
+      --warn: #c50f1f;
+      --ok: #6ad69f;
+      --amber: #f6b73c;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 100%; height: 100%; font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); color: var(--text); }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at center, transparent 35%, rgba(0,0,0,.65) 100%),
+        repeating-linear-gradient(0deg, rgba(255,255,255,.03), rgba(255,255,255,.03) 1px, transparent 1px, transparent 3px);
+      mix-blend-mode: screen;
+      opacity: .35;
+      animation: grain 0.16s steps(2) infinite;
+      z-index: 30;
+    }
+    @keyframes grain { 0%{transform:translate(0,0)} 25%{transform:translate(1px,-1px)} 50%{transform:translate(-1px,1px)} 75%{transform:translate(1px,1px)} 100%{transform:translate(0,0)} }
+
+    .app {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      background: linear-gradient(165deg, #0e0e0e, #111 60%, #080808);
+      overflow: hidden;
+    }
+
+    .left, .right { padding: 1.2rem; position: relative; }
+    .left { border-right: 1px solid #333; }
+
+    .display-wrap {
+      border: 2px solid #303030;
+      background: #000;
+      border-radius: 10px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      box-shadow: 0 0 25px rgba(0,0,0,.6) inset, 0 0 14px rgba(226,0,43,.15);
+    }
+
+    .display {
+      font-size: clamp(2rem, 8vw, 5rem);
+      letter-spacing: .25rem;
+      font-weight: 700;
+      color: #f24864;
+      text-align: center;
+      min-height: 4.2rem;
+      text-shadow: 0 0 8px rgba(242, 72, 100, .65);
+    }
+    .status {
+      display: flex;
+      justify-content: space-between;
+      gap: .6rem;
+      font-size: .95rem;
+      color: #bbb;
+      margin-top: .4rem;
+    }
+
+    .doors {
+      position: relative;
+      margin: 1rem 0;
+      height: 170px;
+      background: #0a0a0a;
+      border: 2px solid #313131;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .door {
+      position: absolute;
+      top: 0;
+      width: 50%;
+      height: 100%;
+      background: linear-gradient(90deg, #171717, #2a2a2a);
+      transition: transform 800ms ease;
+    }
+    .door.left { left: 0; border-right: 1px solid #444; }
+    .door.right { right: 0; border-left: 1px solid #444; }
+    .doors.closing .left { transform: translateX(-92%); }
+    .doors.closing .right { transform: translateX(92%); }
+
+    .narration {
+      background: #101010;
+      border: 1px solid #303030;
+      border-radius: 8px;
+      padding: .7rem;
+      min-height: 145px;
+      max-height: 40vh;
+      overflow-y: auto;
+      font-size: .92rem;
+      line-height: 1.35;
+    }
+    .logline { margin: 0 0 .35rem; opacity: .94; }
+    .logline:last-child { margin-bottom: 0; }
+
+    .right {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 1rem;
+      background: linear-gradient(180deg, #151515, #101010);
+    }
+
+    .top-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .5rem;
+      justify-content: flex-end;
+    }
+
+    button {
+      background: #202020;
+      color: var(--text);
+      border: 1px solid #4a4a4a;
+      border-radius: 7px;
+      padding: .5rem .7rem;
+      cursor: pointer;
+    }
+    button:hover:enabled { background: #292929; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+
+    .floor-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(58px, 1fr));
+      gap: .6rem;
+      align-content: start;
+    }
+
+    .floor-btn {
+      padding: .9rem .25rem;
+      font-size: 1.02rem;
+      font-weight: 700;
+      border-radius: 10px;
+      background: radial-gradient(circle at 50% 35%, #3d3d3d, #1e1e1e 60%);
+      border-color: #666;
+      transition: transform .08s ease, filter .2s ease;
+    }
+    .floor-btn:active { transform: scale(.97); }
+
+    .hint-strip {
+      border-top: 1px dashed #3f3f3f;
+      padding-top: .6rem;
+      color: #b6b6b6;
+      font-size: .87rem;
+      display: flex;
+      justify-content: space-between;
+      gap: .7rem;
+    }
+
+    .maintenance-hotspot {
+      position: absolute;
+      right: 14px;
+      bottom: 15px;
+      width: 82px;
+      height: 54px;
+      border: 1px dashed rgba(255,255,255,.26);
+      border-radius: 6px;
+      opacity: .18;
+      cursor: pointer;
+      transition: opacity .2s;
+      z-index: 4;
+    }
+    .maintenance-hotspot:hover { opacity: .45; }
+
+    .scratch {
+      position: absolute;
+      left: 7px;
+      top: 58%;
+      width: 52px;
+      height: 70px;
+      pointer-events: none;
+      opacity: .34;
+      background:
+        linear-gradient(35deg, transparent 22%, #888 23%, #aaa 25%, transparent 26%),
+        linear-gradient(65deg, transparent 30%, #888 31%, #bbb 33%, transparent 34%),
+        linear-gradient(20deg, transparent 56%, #777 57%, #aaa 58%, transparent 59%);
+    }
+
+    .flicker { animation: flicker 190ms linear 3; }
+    @keyframes flicker {
+      0%, 100% { opacity: 1; filter: none; }
+      25% { opacity: .35; filter: brightness(.7); }
+      50% { opacity: .85; filter: contrast(1.3); }
+      80% { opacity: .45; }
+    }
+
+    .blackout {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      z-index: 50;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .12s;
+    }
+    .blackout.active { opacity: 1; }
+
+    .jitter { animation: jitter .14s linear 4; }
+    @keyframes jitter {
+      0%{transform:translate(0)} 25%{transform:translate(2px,-1px)} 50%{transform:translate(-2px,1px)} 75%{transform:translate(1px,2px)} 100%{transform:translate(0)}
+    }
+
+    .modal, .ending {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.7);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 60;
+      padding: 1rem;
+    }
+    .modal.active, .ending.active { display: flex; }
+    .card {
+      width: min(560px, 94vw);
+      background: #141414;
+      border: 1px solid #444;
+      border-radius: 10px;
+      padding: 1rem;
+      box-shadow: 0 18px 40px rgba(0,0,0,.6);
+    }
+    .jump {
+      position: fixed;
+      inset: 0;
+      z-index: 65;
+      background: repeating-radial-gradient(circle at center, rgba(255,0,0,.15), rgba(255,0,0,.15) 8px, rgba(0,0,0,.9) 9px, rgba(0,0,0,.9) 20px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: clamp(2rem, 9vw, 6rem);
+      color: #ff4564;
+      text-shadow: 0 0 20px #ff001f;
+      letter-spacing: .2rem;
+      animation: flicker 0.16s infinite;
+    }
+    .jump.active { display: flex; }
+
+    .hidden { display: none; }
+    .keypad-row { display: flex; gap: .5rem; margin-bottom: .5rem; }
+    .code-input { width: 100%; margin-bottom: .7rem; padding: .5rem; background: #050505; color: #f4f4f4; border: 1px solid #555; }
+  </style>
+</head>
+<body>
+  <div class="app" id="app">
+    <div class="left">
+      <div class="display-wrap">
+        <div class="display" id="display">--</div>
+        <div class="status">
+          <span id="stateLabel">STATE: IDLE</span>
+          <span id="meters">Fear 0 | Suspicion 0</span>
+        </div>
+      </div>
+      <div class="doors" id="doors">
+        <div class="door left"></div>
+        <div class="door right"></div>
+      </div>
+      <div class="narration" id="narration"></div>
+    </div>
+
+    <div class="right">
+      <div class="top-controls">
+        <button id="newBtn">New Game</button>
+        <button id="continueBtn">Continue</button>
+        <button id="muteBtn">Mute: ON</button>
+        <button id="inspectBtn">Inspection Certificate</button>
+        <button id="restartBtn">Restart</button>
+      </div>
+
+      <div style="position:relative;">
+        <div class="scratch" title="Scratch marks: 4 long, 2 short, 9 deep"></div>
+        <div class="floor-grid" id="floorGrid"></div>
+        <div class="maintenance-hotspot" id="maintHotspot" title="Loose maintenance panel"></div>
+      </div>
+
+      <div class="hint-strip">
+        <span>Scratches near panel: <strong>4 / 2 / 9</strong></span>
+        <span>Repeated line changes when you disobey it.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="blackout" id="blackout"></div>
+
+  <div class="modal" id="inspectModal">
+    <div class="card">
+      <h3 style="margin-top:0;">Inspection Certificate</h3>
+      <p>Certified safe route update issued: <strong>04-29 23:40</strong>.</p>
+      <p>Emergency recall sequence references "descending check" after midnight service.</p>
+      <p style="opacity:.8;font-size:.9rem;">Hint: the date and time hide a sequence if split into floor digits.</p>
+      <button id="closeInspect">Close</button>
+    </div>
+  </div>
+
+  <div class="modal" id="codeModal">
+    <div class="card">
+      <h3 style="margin-top:0;">Maintenance Override Keypad</h3>
+      <p>Enter 4-digit service code.</p>
+      <input class="code-input" id="codeInput" maxlength="4" placeholder="----" />
+      <div class="keypad-row">
+        <button id="submitCode">Submit</button>
+        <button id="closeCode">Cancel</button>
+      </div>
+      <p id="codeHint" style="font-size:.9rem;color:#bfbfbf;">Digits found: none.</p>
+    </div>
+  </div>
+
+  <div class="ending" id="ending">
+    <div class="card" id="endingCard"></div>
+  </div>
+
+  <div class="jump" id="jump">WELCOME HOME</div>
+
+  <script>
+    // Difficulty + balance knobs: tweak these values.
+    const CONFIG = {
+      eventChance: 0.66,
+      badPress13SuspicionThreshold: 65,
+      fearLossThreshold: 100,
+      goodSequence: [4, 2, 9, 1], // winning sequence (can tweak for difficulty)
+      serviceCode: "4291" // secret ending code
+    };
+
+    const floors = Array.from({ length: 13 }, (_, i) => ({
+      id: i + 1,
+      label: String(i + 1),
+      desc: [
+        "A dry chime echoes behind the walls.",
+        "The panel hums like a held breath.",
+        "A cold draft slips through sealed doors.",
+        "The lights stutter. Something answers from above.",
+        "A mirrored wall briefly shows one extra silhouette.",
+        "The ceiling speaker crackles without words.",
+        "A safety poster peels itself further.",
+        "You smell ozone and damp carpet.",
+        "The emergency phone is warm to touch.",
+        "A wet footprint appears, then dries.",
+        "The floor indicator lags one beat behind.",
+        "The number 12 scratches itself deeper.",
+        "No one printed this floor on the building map."
+      ][i]
+    }));
+
+    const state = {
+      mode: "IDLE",
+      currentFloor: 1,
+      displayedFloor: "1",
+      fear: 0,
+      suspicion: 0,
+      codeDigitsFound: [],
+      clueFound: { panel: false, cert: false, scratch: false, message: false },
+      blockedFloors: [],
+      pressedHistory: [],
+      messageLevel: 0,
+      muted: true,
+      saveVersion: 1,
+      alive: true,
+      ending: null
+    };
+
+    const els = {
+      display: document.getElementById("display"),
+      narration: document.getElementById("narration"),
+      floorGrid: document.getElementById("floorGrid"),
+      doors: document.getElementById("doors"),
+      meters: document.getElementById("meters"),
+      stateLabel: document.getElementById("stateLabel"),
+      app: document.getElementById("app"),
+      blackout: document.getElementById("blackout"),
+      jump: document.getElementById("jump"),
+      continueBtn: document.getElementById("continueBtn"),
+      newBtn: document.getElementById("newBtn"),
+      restartBtn: document.getElementById("restartBtn"),
+      muteBtn: document.getElementById("muteBtn"),
+      inspectBtn: document.getElementById("inspectBtn"),
+      inspectModal: document.getElementById("inspectModal"),
+      closeInspect: document.getElementById("closeInspect"),
+      maintHotspot: document.getElementById("maintHotspot"),
+      codeModal: document.getElementById("codeModal"),
+      codeInput: document.getElementById("codeInput"),
+      submitCode: document.getElementById("submitCode"),
+      closeCode: document.getElementById("closeCode"),
+      codeHint: document.getElementById("codeHint"),
+      ending: document.getElementById("ending"),
+      endingCard: document.getElementById("endingCard")
+    };
+
+    let audioCtx;
+    function playTone(type = "hum", duration = 0.6, freq = 120) {
+      if (state.muted) return;
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type === "warn" ? "sawtooth" : "sine";
+      osc.frequency.value = freq;
+      gain.gain.value = 0.0001;
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      const now = audioCtx.currentTime;
+      gain.gain.exponentialRampToValueAtTime(0.05, now + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+      osc.start(now);
+      osc.stop(now + duration);
+    }
+
+    function rand(n) { return Math.floor(Math.random() * n); }
+    function chance(p) { return Math.random() < p; }
+
+    function setMode(mode) { state.mode = mode; els.stateLabel.textContent = `STATE: ${mode}`; }
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    function log(text) {
+      const p = document.createElement("p");
+      p.className = "logline";
+      p.textContent = `• ${text}`;
+      els.narration.prepend(p);
+      while (els.narration.children.length > 28) els.narration.removeChild(els.narration.lastChild);
+    }
+
+    function updateMeters() {
+      els.meters.textContent = `Fear ${state.fear} | Suspicion ${state.suspicion}`;
+      els.display.textContent = state.displayedFloor;
+      document.querySelectorAll(".floor-btn").forEach(b => {
+        const f = +b.dataset.floor;
+        b.disabled = state.mode !== "IDLE" || state.blockedFloors.includes(f) || !state.alive;
+      });
+    }
+
+    function saveGame() {
+      localStorage.setItem("elevator13-save", JSON.stringify(state));
+    }
+
+    function hasSave() {
+      const raw = localStorage.getItem("elevator13-save");
+      return !!raw;
+    }
+
+    function loadSave() {
+      const raw = localStorage.getItem("elevator13-save");
+      if (!raw) return false;
+      try {
+        const data = JSON.parse(raw);
+        Object.assign(state, data);
+        log("You remember where the doors last opened.");
+        updateRepeatMessage();
+        renderButtons();
+        updateMeters();
+        return true;
+      } catch { return false; }
+    }
+
+    function clearSave() {
+      localStorage.removeItem("elevator13-save");
+    }
+
+    function renderButtons() {
+      els.floorGrid.innerHTML = "";
+      for (const f of floors) {
+        const b = document.createElement("button");
+        b.className = "floor-btn";
+        b.dataset.floor = String(f.id);
+        b.textContent = f.label;
+        b.addEventListener("click", () => onFloorPress(f.id));
+        els.floorGrid.appendChild(b);
+      }
+      updateMeters();
+    }
+
+    function swapRandomLabels() {
+      const labels = floors.map(f => f.label);
+      const i = rand(labels.length);
+      const j = rand(labels.length);
+      [labels[i], labels[j]] = [labels[j], labels[i]];
+      floors.forEach((f, idx) => f.label = labels[idx]);
+      renderButtons();
+      state.suspicion = Math.min(100, state.suspicion + 12);
+      log("Two floor labels have switched places.");
+    }
+
+    function forcedThirteenFlicker() {
+      const old = state.displayedFloor;
+      state.displayedFloor = "13";
+      els.display.classList.add("flicker");
+      updateMeters();
+      setTimeout(() => {
+        state.displayedFloor = old;
+        els.display.classList.remove("flicker");
+        updateMeters();
+      }, 700);
+      state.suspicion = Math.min(100, state.suspicion + 16);
+      log("The display flashes 13, then pretends it did not.");
+    }
+
+    function intercomWarning() {
+      playTone("warn", 0.8, 220);
+      state.messageLevel += 1;
+      updateRepeatMessage();
+      log('Intercom: "DO NOT PRESS 13."');
+    }
+
+    function maintenanceReveal() {
+      state.clueFound.panel = true;
+      const nextDigit = CONFIG.serviceCode[state.codeDigitsFound.length];
+      if (nextDigit && !state.codeDigitsFound.includes(nextDigit)) state.codeDigitsFound.push(nextDigit);
+      log(`Maintenance panel jerks open. Etched inside: ${nextDigit || "RUST"}.`);
+      saveGame();
+    }
+
+    async function lightsOut() {
+      els.blackout.classList.add("active");
+      log("Power failure. You hear breathing in the dark.");
+      state.fear = Math.min(100, state.fear + 12);
+      await sleep(2000);
+      els.blackout.classList.remove("active");
+    }
+
+    function overweightBlock() {
+      const blocked = [rand(13) + 1, rand(13) + 1].filter((v, i, a) => a.indexOf(v) === i);
+      state.blockedFloors = blocked;
+      state.fear = Math.min(100, state.fear + 6);
+      log(`Overweight sensor triggers. Floors ${blocked.join(", ")} locked for one turn.`);
+    }
+
+    const events = [
+      { name: "swapLabels", prob: 0.16, can: () => true, do: swapRandomLabels },
+      { name: "flash13", prob: 0.18, can: () => true, do: forcedThirteenFlicker },
+      { name: "intercom", prob: 0.2, can: () => true, do: intercomWarning },
+      { name: "maintOpen", prob: 0.13, can: () => state.codeDigitsFound.length < 4, do: maintenanceReveal },
+      { name: "lightsOut", prob: 0.14, can: () => true, do: lightsOut },
+      { name: "overweight", prob: 0.12, can: () => state.blockedFloors.length === 0, do: overweightBlock }
+    ];
+
+    function weightedEvent() {
+      if (!chance(CONFIG.eventChance)) return null;
+      const options = events.filter(e => e.can());
+      const total = options.reduce((s, e) => s + e.prob, 0);
+      let roll = Math.random() * total;
+      for (const e of options) {
+        roll -= e.prob;
+        if (roll <= 0) return e;
+      }
+      return null;
+    }
+
+    function updateRepeatMessage() {
+      const messages = [
+        "The speaker hisses static.",
+        'Intercom repeats: "DO NOT PRESS 13."',
+        'Intercom distorts: "do... not... PRESS 13..."',
+        'Intercom whispers your name after "13."'
+      ];
+      const idx = Math.min(messages.length - 1, Math.floor(state.messageLevel / 2));
+      state.clueFound.message = idx > 0;
+      log(messages[idx]);
+    }
+
+    function checkGoodEnding() {
+      const seq = CONFIG.goodSequence;
+      const n = seq.length;
+      const tail = state.pressedHistory.slice(-n);
+      if (tail.length === n && tail.every((v, i) => v === seq[i])) {
+        endGame("good");
+        return true;
+      }
+      return false;
+    }
+
+    function checkBadEnding(chosenFloor) {
+      if (state.fear >= CONFIG.fearLossThreshold) return endGame("bad");
+      if (chosenFloor === 13 && state.suspicion >= CONFIG.badPress13SuspicionThreshold) return endGame("bad");
+      return false;
+    }
+
+    function maybeOpenCodeModal() {
+      if (state.codeDigitsFound.length === 4 && state.displayedFloor === "13" && state.clueFound.panel) {
+        els.codeHint.textContent = `Digits found: ${state.codeDigitsFound.join(" ")}`;
+        els.codeModal.classList.add("active");
+      }
+    }
+
+    function endGame(type) {
+      state.alive = false;
+      setMode("END");
+      state.ending = type;
+      let html = "";
+      if (type === "good") {
+        state.displayedFloor = "LOBBY";
+        html = `<h2>Escape Ending</h2><p>The doors open to the quiet lobby. Dawn light spills across the marble. The hum is finally gone.</p><p><strong>You escaped Floor 13.</strong></p><button onclick="location.reload()">Play Again</button>`;
+        log("Override sequence accepted. Route changed to LOBBY.");
+      } else if (type === "secret") {
+        state.displayedFloor = "SERVICE LADDER";
+        html = `<h2>Secret Ending</h2><p>You pry open the service hatch and climb down the ladder. Behind you, the elevator descends to 13 on its own.</p><p><strong>Clever escape achieved.</strong></p><button onclick="location.reload()">Play Again</button>`;
+        log("Service ladder unlocked by full code.");
+      } else {
+        state.displayedFloor = "13";
+        els.jump.classList.add("active");
+        els.app.classList.add("jitter");
+        html = `<h2>Trapped Ending</h2><p>The panel goes dead. The display locks to 13. From inside the walls: breathing, then laughter.</p><p><strong>WELCOME HOME.</strong></p><button onclick="location.reload()">Try Again</button>`;
+      }
+      updateMeters();
+      els.endingCard.innerHTML = html;
+      els.ending.classList.add("active");
+      saveGame();
+      return true;
+    }
+
+    async function onFloorPress(floor) {
+      if (state.mode !== "IDLE" || !state.alive) return;
+      if (state.blockedFloors.includes(floor)) { log(`Floor ${floor} is temporarily blocked.`); return; }
+
+      state.pressedHistory.push(floor);
+      if (state.pressedHistory.length > 12) state.pressedHistory.shift();
+
+      if (checkBadEnding(floor)) return;
+
+      setMode("TRAVEL");
+      els.doors.classList.add("closing");
+      playTone("hum", 1.2, 96);
+      log(`Doors close. You selected floor ${floor}.`);
+
+      await sleep(900);
+      els.app.classList.add("flicker");
+      await sleep(700);
+      els.app.classList.remove("flicker");
+
+      state.currentFloor = floor;
+      state.displayedFloor = String(floor);
+      setMode("ARRIVAL");
+      log(floors[floor - 1].desc);
+      state.fear = Math.min(100, state.fear + (floor === 13 ? 25 : 4));
+
+      const ev = weightedEvent();
+      if (ev) {
+        setMode("EVENT");
+        await ev.do();
+      }
+
+      if (floor === 13) {
+        state.displayedFloor = "13";
+        state.suspicion = Math.min(100, state.suspicion + 20);
+        log("The air pressure changes. Something arrives before the doors open.");
+      }
+
+      if (checkBadEnding(floor)) return;
+      if (checkGoodEnding()) return;
+
+      if (state.blockedFloors.length) state.blockedFloors = [];
+      els.doors.classList.remove("closing");
+      setMode("IDLE");
+      maybeOpenCodeModal();
+      saveGame();
+      updateMeters();
+    }
+
+    function resetGame() {
+      Object.assign(state, {
+        mode: "IDLE", currentFloor: 1, displayedFloor: "1", fear: 0, suspicion: 0, codeDigitsFound: [],
+        clueFound: { panel: false, cert: false, scratch: false, message: false }, blockedFloors: [],
+        pressedHistory: [], messageLevel: 0, alive: true, ending: null
+      });
+      floors.forEach((f, idx) => f.label = String(idx + 1));
+      els.jump.classList.remove("active");
+      els.ending.classList.remove("active");
+      els.narration.innerHTML = "";
+      log("The elevator wakes. A cold voice says: choose a floor.");
+      renderButtons();
+      saveGame();
+    }
+
+    els.inspectBtn.addEventListener("click", () => {
+      state.clueFound.cert = true;
+      els.inspectModal.classList.add("active");
+      log("Certificate clue read: 04-29 23:40.");
+      saveGame();
+    });
+    els.closeInspect.addEventListener("click", () => els.inspectModal.classList.remove("active"));
+
+    els.maintHotspot.addEventListener("click", () => {
+      state.clueFound.panel = true;
+      log("You pry open the hidden maintenance panel.");
+      if (state.displayedFloor === "13" && state.codeDigitsFound.length === 4) {
+        maybeOpenCodeModal();
+      } else {
+        const d = CONFIG.serviceCode[state.codeDigitsFound.length];
+        if (d && !state.codeDigitsFound.includes(d)) {
+          state.codeDigitsFound.push(d);
+          log(`Scratched behind the panel: ${d}`);
+        } else {
+          log("Only old wires and a burnt fuse remain.");
+        }
+      }
+      saveGame();
+    });
+
+    els.submitCode.addEventListener("click", () => {
+      const code = els.codeInput.value.trim();
+      if (code === CONFIG.serviceCode) {
+        els.codeModal.classList.remove("active");
+        endGame("secret");
+      } else {
+        state.fear = Math.min(100, state.fear + 12);
+        state.suspicion = Math.min(100, state.suspicion + 8);
+        log("Wrong code. The cab drops half a floor and slams to a stop.");
+        updateMeters();
+      }
+    });
+    els.closeCode.addEventListener("click", () => els.codeModal.classList.remove("active"));
+
+    els.muteBtn.addEventListener("click", () => {
+      state.muted = !state.muted;
+      els.muteBtn.textContent = `Mute: ${state.muted ? "ON" : "OFF"}`;
+      saveGame();
+    });
+
+    els.restartBtn.addEventListener("click", resetGame);
+    els.newBtn.addEventListener("click", () => { clearSave(); resetGame(); });
+    els.continueBtn.addEventListener("click", () => {
+      if (!loadSave()) resetGame();
+    });
+
+    function init() {
+      renderButtons();
+      els.continueBtn.disabled = !hasSave();
+      if (!hasSave()) {
+        log("No prior run found. Begin a new ride.");
+      } else {
+        log("A previous run is trapped in memory.");
+      }
+      updateMeters();
+    }
+
+    init();
+  </script>
+</body>
+</html>
