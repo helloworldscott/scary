@@ -333,10 +333,13 @@
       display: none;
       align-items: center;
       justify-content: center;
-      z-index: 60;
+      z-index: 120;
       padding: 1rem;
+      pointer-events: none;
     }
     .modal.active, .ending.active { display: flex; }
+    .modal.active { pointer-events: auto; }
+    .modal .card { pointer-events: auto; }
     .ending {
       pointer-events: none;
       overflow: hidden;
@@ -385,8 +388,45 @@
     .jump.active { display: flex; }
 
     .hidden { display: none; }
-    .keypad-row { display: flex; gap: .5rem; margin-bottom: .5rem; }
-    .code-input { width: 100%; margin-bottom: .7rem; padding: .5rem; background: #050505; color: #f4f4f4; border: 1px solid #555; }
+    .maintenance-card {
+      width: min(380px, 92vw);
+      animation: modalPopIn .22s ease;
+      transform-origin: center;
+    }
+    @keyframes modalPopIn {
+      0% { transform: scale(.9) translateY(10px); opacity: 0; }
+      100% { transform: scale(1) translateY(0); opacity: 1; }
+    }
+    .keypad-display {
+      width: 100%;
+      margin: .4rem 0 .9rem;
+      padding: .55rem;
+      border: 1px solid #555;
+      border-radius: 7px;
+      text-align: center;
+      letter-spacing: .4rem;
+      font-size: 1.25rem;
+      background: #050505;
+      color: #f4f4f4;
+      min-height: 2.6rem;
+    }
+    .keypad-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: .5rem;
+      margin-bottom: .55rem;
+    }
+    .keypad-grid button,
+    .keypad-actions button {
+      min-height: 2.2rem;
+      font-weight: 600;
+    }
+    .keypad-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: .5rem;
+      margin-top: .45rem;
+    }
   </style>
 </head>
 <body>
@@ -442,16 +482,21 @@
     </div>
   </div>
 
-  <div class="modal" id="codeModal">
-    <div class="card">
-      <h3 style="margin-top:0;">Maintenance Override Keypad</h3>
-      <p>Enter 4-digit service code.</p>
-      <input class="code-input" id="codeInput" maxlength="4" placeholder="----" />
-      <div class="keypad-row">
-        <button id="submitCode">Submit</button>
-        <button id="closeCode">Cancel</button>
+  <div class="modal" id="codeModal" aria-hidden="true">
+    <div class="card maintenance-card" role="dialog" aria-modal="true" aria-labelledby="maintenanceTitle">
+      <h3 id="maintenanceTitle" style="margin-top:0;">MAINTENANCE OVERRIDE</h3>
+      <p id="codeHint" style="font-size:.9rem;color:#bfbfbf;">Enter 4-digit service code.</p>
+      <div class="keypad-display" id="codeDisplay">_ _ _ _</div>
+      <div class="keypad-grid" id="keypadGrid">
+        <button data-digit="1">1</button><button data-digit="2">2</button><button data-digit="3">3</button>
+        <button data-digit="4">4</button><button data-digit="5">5</button><button data-digit="6">6</button>
+        <button data-digit="7">7</button><button data-digit="8">8</button><button data-digit="9">9</button>
+        <button id="clearCode">Clear</button><button data-digit="0">0</button><button id="backCode">Backspace</button>
       </div>
-      <p id="codeHint" style="font-size:.9rem;color:#bfbfbf;">Digits found: none.</p>
+      <div class="keypad-actions">
+        <button id="submitCode">Submit</button>
+        <button id="closeCode">Close</button>
+      </div>
     </div>
   </div>
 
@@ -499,11 +544,12 @@
       fear: 0,
       suspicion: 0,
       clueFound: { panel: false, cert: false, scratch: false, message: false },
+      secretEndingUnlocked: false,
       blockedFloors: [],
       pressedHistory: [],
       messageLevel: 0,
       muted: true,
-      saveVersion: 1,
+      saveVersion: 2,
       alive: true,
       ending: null,
       codeProgress: [null, null, null, null],
@@ -515,6 +561,9 @@
     const FLICKER13_RAPID_MS = 500;
     let flicker13Active = false;
     let hatchPromptLoggedThisFlicker = false;
+    let maintenanceInput = "";
+    let maintenanceModalOpen = false;
+    let lastFocusedElement = null;
 
     const els = {
       display: document.getElementById("display"),
@@ -538,7 +587,10 @@
       scratchClue: document.getElementById("scratchClue"),
       codeIndicator: document.getElementById("codeIndicator"),
       codeModal: document.getElementById("codeModal"),
-      codeInput: document.getElementById("codeInput"),
+      keypadGrid: document.getElementById("keypadGrid"),
+      codeDisplay: document.getElementById("codeDisplay"),
+      clearCode: document.getElementById("clearCode"),
+      backCode: document.getElementById("backCode"),
       submitCode: document.getElementById("submitCode"),
       closeCode: document.getElementById("closeCode"),
       codeHint: document.getElementById("codeHint"),
@@ -588,6 +640,21 @@
       gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
       osc.connect(gain); gain.connect(masterGain);
       osc.start(now); osc.stop(now + 0.07);
+    }
+
+    function playMaintenanceTick() {
+      if (!audioGate()) return;
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "square";
+      osc.frequency.setValueAtTime(920, now);
+      osc.frequency.exponentialRampToValueAtTime(680, now + 0.08);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.025, now + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.1);
+      osc.connect(gain); gain.connect(masterGain);
+      osc.start(now); osc.stop(now + 0.11);
     }
 
     function playTravelHum() {
@@ -738,7 +805,7 @@
       els.display.textContent = state.displayedFloor;
       document.querySelectorAll(".floor-btn").forEach(b => {
         const f = +b.dataset.floor;
-        b.disabled = state.mode !== "IDLE" || state.blockedFloors.includes(f) || !state.alive;
+        b.disabled = state.mode !== "IDLE" || state.blockedFloors.includes(f) || !state.alive || maintenanceModalOpen;
       });
     }
 
@@ -756,6 +823,8 @@
       if (!raw) return false;
       try {
         const data = JSON.parse(raw);
+        if (Array.isArray(data.codeDigitsFound) && !Array.isArray(data.foundDigits)) data.foundDigits = data.codeDigitsFound;
+        if (typeof data.secretEndingUnlocked !== "boolean") data.secretEndingUnlocked = data.ending === "secret";
         Object.assign(state, data);
         log("You remember where the doors last opened.");
         updateRepeatMessage();
@@ -905,7 +974,17 @@
       if (state.codeProgress.every(Boolean)) {
         updateCodeIndicator();
         els.codeModal.classList.add("active");
+        els.codeModal.setAttribute("aria-hidden", "false");
+        playMaintenanceTick();
+        setTimeout(() => {
+          if (!maintenanceModalOpen) {
+            els.codeModal.classList.remove("active");
+            els.codeModal.setAttribute("aria-hidden", "true");
+          }
+        }, 1100);
+        return;
       }
+      openKeypadModal();
     }
 
     function endGame(type) {
@@ -919,8 +998,9 @@
         log("Override sequence accepted. Route changed to LOBBY.");
       } else if (type === "secret") {
         state.displayedFloor = "SERVICE LADDER";
-        html = `<h2>Secret Ending</h2><p>You pry open the service hatch and climb down the ladder. Behind you, the elevator descends to 13 on its own.</p><p><strong>Clever escape achieved.</strong></p><button onclick="location.reload()">Play Again</button>`;
-        log("Service ladder unlocked by full code.");
+        state.secretEndingUnlocked = true;
+        html = `<h2>SERVICE LADDER</h2><p>You climb into the shaft while the elevator screams below.</p><p><strong>The maintenance route accepts you and nothing else.</strong></p><button onclick="location.reload()">Play Again</button>`;
+        log("You climb into the shaft while the elevator screams below.");
       } else {
         state.displayedFloor = "13";
         playBadEndingSound();
@@ -1032,11 +1112,39 @@
       saveGame();
     });
 
-    els.submitCode.addEventListener("click", () => {
+    els.keypadGrid.addEventListener("click", (e) => {
+      const btn = e.target.closest("button");
+      if (!btn || !maintenanceModalOpen) return;
+      const digit = btn.dataset.digit;
+      if (!digit || maintenanceInput.length >= 4) return;
       playButtonTick();
-      const code = els.codeInput.value.trim();
-      if (code === CONFIG.serviceCode) {
-        els.codeModal.classList.remove("active");
+      maintenanceInput += digit;
+      renderKeypadModal();
+    });
+
+    els.clearCode.addEventListener("click", () => {
+      if (!maintenanceModalOpen) return;
+      playButtonTick();
+      maintenanceInput = "";
+      renderKeypadModal();
+    });
+
+    els.backCode.addEventListener("click", () => {
+      if (!maintenanceModalOpen) return;
+      playButtonTick();
+      maintenanceInput = maintenanceInput.slice(0, -1);
+      renderKeypadModal();
+    });
+
+    // submit handler + secret ending trigger
+    els.submitCode.addEventListener("click", () => {
+      if (!maintenanceModalOpen) return;
+      playButtonTick();
+      const code = maintenanceInput;
+      if (code === state.foundDigits.join("")) {
+        closeKeypadModal();
+        state.secretEndingUnlocked = true;
+        log("You climb into the shaft while the elevator screams below.");
         endGame("secret");
       } else {
         state.fear = Math.min(100, state.fear + 15);
@@ -1045,8 +1153,19 @@
         els.codeModal.classList.remove("active");
         updateMeters();
       }
+      saveGame();
     });
-    els.closeCode.addEventListener("click", () => els.codeModal.classList.remove("active"));
+
+    els.closeCode.addEventListener("click", () => {
+      if (maintenanceModalOpen) {
+        closeKeypadModal();
+      } else {
+        els.codeModal.classList.remove("active");
+        els.codeModal.setAttribute("aria-hidden", "true");
+      }
+    });
+
+    document.addEventListener("keydown", trapMaintenanceFocus);
 
     els.muteBtn.addEventListener("click", () => {
       ensureAudioContext();
