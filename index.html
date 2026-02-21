@@ -170,86 +170,6 @@
       box-shadow: 0 0 0 2px rgba(242,74,102,.35) inset;
     }
 
-    .scratch-clue {
-      position: absolute;
-      left: -36px;
-      top: 60%;
-      transform: translateY(-50%) rotate(-1.5deg) skewY(1.2deg);
-      pointer-events: none;
-      z-index: 1;
-      opacity: .25;
-      transition: opacity .35s ease, filter .35s ease, text-shadow .35s ease;
-      filter: blur(.25px) contrast(1.08);
-      mix-blend-mode: screen;
-      color: rgba(220,220,220,.78);
-      text-shadow: -1px 0 rgba(115,115,115,.42), 0 1px rgba(225,225,225,.16);
-      font-family: "Courier New", monospace;
-      font-size: .88rem;
-      letter-spacing: .22rem;
-      line-height: 1.2;
-      white-space: pre;
-      user-select: none;
-      -webkit-user-select: none;
-    }
-
-    .scratch-clue::after {
-      content: "";
-      position: absolute;
-      inset: -4px;
-      background: repeating-linear-gradient(12deg, rgba(255,255,255,.07) 0, rgba(255,255,255,.07) 1px, transparent 1px, transparent 3px);
-      opacity: .26;
-      filter: blur(.2px);
-      pointer-events: none;
-    }
-
-    .scratch-clue.revealed {
-      opacity: .5;
-      text-shadow: -1px 0 rgba(140,140,140,.55), 0 0 8px rgba(210,210,210,.24);
-      filter: blur(.15px) contrast(1.12) brightness(1.08);
-    }
-
-    .scratch-inspect-hitbox {
-      position: absolute;
-      left: -42px;
-      top: 60%;
-      transform: translateY(-50%);
-      width: 74px;
-      height: 86px;
-      z-index: 2;
-      background: transparent;
-      border: 0;
-      padding: 0;
-      color: inherit;
-      cursor: help;
-    }
-
-    .scratch-tooltip {
-      position: absolute;
-      left: -10px;
-      top: calc(100% + 6px);
-      min-width: 180px;
-      max-width: 240px;
-      font-size: .74rem;
-      line-height: 1.3;
-      padding: .34rem .45rem;
-      border: 1px solid rgba(196,196,196,.35);
-      border-radius: 5px;
-      background: rgba(10,10,10,.95);
-      color: rgba(212,212,212,.93);
-      box-shadow: 0 4px 12px rgba(0,0,0,.45);
-      opacity: 0;
-      transform: translateY(4px);
-      transition: opacity .18s ease, transform .18s ease;
-      pointer-events: none;
-    }
-
-    .scratch-inspect-hitbox.show-tooltip .scratch-tooltip,
-    .scratch-inspect-hitbox:hover .scratch-tooltip,
-    .scratch-inspect-hitbox:focus-visible .scratch-tooltip {
-      opacity: 1;
-      transform: translateY(0);
-    }
-
     .maintenance-hatch {
       position: absolute;
       right: 10px;
@@ -310,6 +230,16 @@
     }
     .display.flicker13-rapid { animation: f13Rapid 88ms steps(2,end) infinite; }
     .display.flicker13-pulse { animation: f13Pulse 760ms ease-in-out infinite; }
+    .display-wrap.memory-glitch {
+      border-color: rgba(198,27,48,.85);
+      box-shadow: inset 0 0 28px rgba(198,27,48,.18), 0 0 20px rgba(198,27,48,.35);
+      filter: brightness(1.12);
+    }
+    .display.memory-glitch-pulse {
+      color: #ff7187;
+      animation: memoryGlitchPulse 160ms ease-in-out infinite;
+      text-shadow: 0 0 10px rgba(255,113,135,.72), 0 0 20px rgba(198,27,48,.42);
+    }
     .display.sequence-flash { animation: sequenceFlash .22s ease-in-out 2; }
     @keyframes f13Rapid {
       0%,100%{opacity:1} 28%{opacity:.28} 50%{opacity:.76} 74%{opacity:.38}
@@ -320,6 +250,10 @@
     @keyframes sequenceFlash {
       0%,100% { filter: brightness(1); text-shadow: 0 0 7px rgba(242,74,102,.58); }
       50% { filter: brightness(1.7); text-shadow: 0 0 13px rgba(118,214,166,.8); }
+    }
+    @keyframes memoryGlitchPulse {
+      0%,100% { filter: brightness(1.05); }
+      50% { filter: brightness(1.45); }
     }
 
     .blackout {
@@ -448,12 +382,6 @@
         min-width: 64px;
         font-size: 1.12rem;
       }
-      .scratch-clue {
-        left: -30px;
-      }
-      .scratch-inspect-hitbox {
-        left: -36px;
-      }
       body {
         padding-bottom: env(safe-area-inset-bottom);
       }
@@ -488,12 +416,6 @@
       <div class="panel-zone">
         <button id="maintenanceHatch" class="maintenance-hatch" aria-label="Maintenance hatch">SERVICE</button>
         <div class="floor-grid-wrap">
-          <div class="scratch-clue" id="scratchClue" aria-hidden="true">4 /
-2 /
-9</div>
-          <button class="scratch-inspect-hitbox" id="scratchInspect" aria-label="Inspect old score marks">
-            <span class="scratch-tooltip" role="tooltip">Old scoring marks. Three numbers stand out.</span>
-          </button>
           <div class="floor-grid" id="floorGrid"></div>
         </div>
       </div>
@@ -563,20 +485,19 @@
       recentPresses: [],
       calmRidesRemaining: 0,
       clueFound: {
-        scratchesSeen: false,
         certSeen: false,
         intercomSeen: false,
-        serialSeen: false,
-        scratchesSequenceDone: false
+        serialSeen: false
       },
       flags: {
-        scratchUnlocked: false,
-        scratchRevealed: false,
+        patternUnlocked: false,
         descendUnlocked: false,
+        firstFlickerSeen: false,
+        patternHintSeen: false,
         goodEndingSeen: false,
         secretEndingSeen: false
       },
-      foundDigits: { scratch: null, cert: null, intercom: null, serial: null },
+      foundDigits: { cert: null, intercom: null, serial: null },
       endingsAchieved: { good: false, bad: false, secret: false },
       saveVersion: 4
     };
@@ -608,8 +529,6 @@
       inspectBtn: document.getElementById("inspectBtn"),
       inspectModal: document.getElementById("inspectModal"),
       closeInspect: document.getElementById("closeInspect"),
-      scratchClue: document.getElementById("scratchClue"),
-      scratchInspect: document.getElementById("scratchInspect"),
       maintenanceHatch: document.getElementById("maintenanceHatch"),
       codeModal: document.getElementById("codeModal"),
       keypadGrid: document.getElementById("keypadGrid"),
@@ -796,18 +715,6 @@
       els.flickerHint.textContent = flicker13Active ? "A seam glints near the lower-right panel." : "";
     }
 
-    function updateScratchClueUI() {
-      els.scratchClue.classList.toggle("revealed", state.flags.scratchRevealed);
-    }
-
-    function revealScratchClue() {
-      if (state.flags.scratchRevealed) return;
-      state.flags.scratchRevealed = true;
-      updateScratchClueUI();
-      log("Something etched near the panel catches the light.");
-      saveGame();
-    }
-
     function saveGame() {
       const persist = {
         fear: state.fear,
@@ -834,9 +741,10 @@
         state.suspicion = Number(data.suspicion) || 0;
         state.currentFloor = Number(data.currentFloor) || 1;
         state.flags = {
-          scratchUnlocked: !!data.flags?.scratchUnlocked,
-          scratchRevealed: !!data.flags?.scratchRevealed,
+          patternUnlocked: !!data.flags?.patternUnlocked,
           descendUnlocked: !!data.flags?.descendUnlocked,
+          firstFlickerSeen: !!data.flags?.firstFlickerSeen,
+          patternHintSeen: !!data.flags?.patternHintSeen,
           goodEndingSeen: !!data.flags?.goodEndingSeen,
           secretEndingSeen: !!data.flags?.secretEndingSeen
         };
@@ -848,7 +756,6 @@
         state.displayedFloor = String(state.currentFloor);
         log("You remember where the doors last opened.");
         updateAmbientHint();
-        updateScratchClueUI();
         updateMeters();
         els.muteBtn.textContent = `Sound: ${state.muted ? "MUTED" : "LIVE"}`;
         return true;
@@ -881,7 +788,7 @@
     }
 
     function updateAmbientHint() {
-      if (state.flags.scratchUnlocked) {
+      if (state.flags.patternUnlocked) {
         els.ambientHint.textContent = "Now prove you can go down.";
         return;
       }
@@ -913,9 +820,9 @@
       document.querySelectorAll(".floor-btn").forEach((btn) => btn.classList.toggle("recent-hit", Number(btn.dataset.floor) === floor));
     }
 
-    function runScratchSequenceReward() {
-      if (state.flags.scratchUnlocked) return;
-      state.flags.scratchUnlocked = true;
+    function runPatternSequenceReward() {
+      if (state.flags.patternUnlocked) return;
+      state.flags.patternUnlocked = true;
       state.calmRidesRemaining = 3;
       log("The cab remembers patterns better than people.");
       log("Now prove you can go down.");
@@ -936,9 +843,9 @@
     // checkSequences()
     function checkSequences() {
       if (matchesRecentSequence(SCRATCH_SEQUENCE)) {
-        runScratchSequenceReward();
+        runPatternSequenceReward();
       }
-      if (state.flags.scratchUnlocked && matchesRecentSequence(DESCENDING_CHECK_SEQUENCE)) {
+      if (state.flags.patternUnlocked && matchesRecentSequence(DESCENDING_CHECK_SEQUENCE)) {
         runDescendingCheckOutcome();
       }
     }
@@ -947,16 +854,6 @@
       if (state.fear >= 100 || (lastPressedFloor === 13 && state.suspicion >= 60)) {
         triggerBadEnding(); // ending triggers
       }
-    }
-
-    function handleScratchClue() {
-      log("Scratches catch your nail: 4 / 2 / 9.");
-      if (!state.clueFound.scratchesSeen) {
-        state.clueFound.scratchesSeen = true;
-      }
-      updateAmbientHint();
-      updateMeters();
-      saveGame();
     }
 
     function inspectCertificate() {
@@ -990,9 +887,9 @@
       const rapidPhaseMs = 400;
 
       flicker13Active = true;
+      state.flags.firstFlickerSeen = true;
       flickerLogPinned = true;
       updateMaintenanceHatchUI();
-      revealScratchClue();
       state.displayedFloor = "13";
       els.displayWrap.classList.add("flicker13-glow");
       els.display.classList.add("flicker13-rapid");
@@ -1018,13 +915,64 @@
       updateMeters();
     }
 
-    async function maybeRideEvents(target) {
-      if (state.flags.scratchUnlocked && Math.random() < 0.15) {
-        await forcedThirteenFlicker();
-        return;
+    function playDisplayMemoryGlitchChime() {
+      if (state.muted) return;
+      const ctx = ensureAudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(730, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(250, ctx.currentTime + 0.24);
+      gain.gain.value = 0.0001;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      const now = ctx.currentTime;
+      gain.gain.exponentialRampToValueAtTime(0.006, now + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.26);
+      osc.start(now);
+      osc.stop(now + 0.27);
+      playNoiseBurst(0.12, 0.006);
+    }
+
+    async function displayMemoryGlitch() {
+      if (maintenanceModalOpen || state.ending || state.gameState === "END") return;
+      const originalDisplay = state.displayedFloor;
+      const pattern = [4, 2, 9];
+      state.flags.patternHintSeen = true;
+      els.displayWrap.classList.add("memory-glitch");
+      els.display.classList.add("memory-glitch-pulse");
+      playDisplayMemoryGlitchChime();
+      for (const floor of pattern) {
+        state.displayedFloor = String(floor);
+        updateMeters();
+        await sleep(250);
       }
+      state.displayedFloor = originalDisplay;
+      els.display.classList.remove("memory-glitch-pulse");
+      els.displayWrap.classList.remove("memory-glitch");
+      log("The display repeats something it shouldn’t.");
+      updateMeters();
+      saveGame();
+    }
+
+    async function maybeRideEvents(target) {
+      const hadFlickerBeforeRide = state.flags.firstFlickerSeen;
       if (target % 4 === 0) {
         intercomEvent();
+        state.flags.firstFlickerSeen = true;
+      }
+      if (
+        hadFlickerBeforeRide &&
+        !state.flags.patternHintSeen &&
+        Math.random() < 0.15 &&
+        !maintenanceModalOpen &&
+        !state.ending
+      ) {
+        await displayMemoryGlitch();
+        return;
+      }
+      if (state.flags.patternUnlocked && Math.random() < 0.15) {
+        await forcedThirteenFlicker();
       }
     }
 
@@ -1240,20 +1188,19 @@
         recentPresses: [],
         calmRidesRemaining: 0,
         clueFound: {
-          scratchesSeen: false,
           certSeen: false,
           intercomSeen: false,
-          serialSeen: false,
-          scratchesSequenceDone: false
+          serialSeen: false
         },
         flags: {
-          scratchUnlocked: false,
-          scratchRevealed: false,
+          patternUnlocked: false,
           descendUnlocked: false,
+          firstFlickerSeen: false,
+          patternHintSeen: false,
           goodEndingSeen: false,
           secretEndingSeen: false
         },
-        foundDigits: { scratch: null, cert: null, intercom: null, serial: null },
+        foundDigits: { cert: null, intercom: null, serial: null },
         endingsAchieved: { good: false, bad: false, secret: false },
         muted: state.muted,
         saveVersion: 4
@@ -1270,7 +1217,6 @@
       els.blackout.classList.remove("active");
       setMode("IDLE");
       updateAmbientHint();
-      updateScratchClueUI();
       updateMeters();
       renderButtons();
       log("Cab reset. The lights hesitate before staying on.");
@@ -1299,27 +1245,6 @@
         saveGame();
       });
 
-      els.scratchInspect.addEventListener("click", handleScratchClue);
-      els.scratchInspect.addEventListener("mouseenter", handleScratchClue, { once: true });
-      let scratchHoldTimer = null;
-      const clearScratchHold = () => {
-        if (scratchHoldTimer) {
-          clearTimeout(scratchHoldTimer);
-          scratchHoldTimer = null;
-        }
-        els.scratchInspect.classList.remove("show-tooltip");
-      };
-      els.scratchInspect.addEventListener("pointerdown", (e) => {
-        if (e.pointerType === "mouse") return;
-        clearScratchHold();
-        scratchHoldTimer = setTimeout(() => {
-          els.scratchInspect.classList.add("show-tooltip");
-          handleScratchClue();
-        }, 450);
-      });
-      ["pointerup", "pointercancel", "pointerleave"].forEach((eventName) => {
-        els.scratchInspect.addEventListener(eventName, clearScratchHold);
-      });
       els.maintenanceHatch.addEventListener("click", onHatchClick);
 
       els.keypadGrid.addEventListener("click", (e) => {
@@ -1348,10 +1273,9 @@
       bindEvents();
       renderButtons();
       updateAmbientHint();
-      updateScratchClueUI();
       updateCodeDisplay();
       els.continueBtn.disabled = !hasSave();
-      log("Service starts. Someone has scratched numbers into the panel edge.");
+      log("Service starts. The display warms up slower than it should.");
       if (hasSave()) {
         log("A stale entry waits in memory. Continue if you trust it.");
       }
