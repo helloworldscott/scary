@@ -464,6 +464,11 @@
     <div class="card" id="endingCard"></div>
   </div>
 
+  <!-- AUDIO ELEMENT -->
+  <audio id="bgAmbience" loop preload="auto">
+    <source src="assets/audio/elevator_music.mp3" type="audio/mpeg">
+  </audio>
+
   <script>
     const floors = Array.from({ length: 13 }, (_, i) => ({ id: i + 1, label: String(i + 1) }));
     // checkSequences() and sequence definitions
@@ -511,6 +516,10 @@
     let codeBuffer = "";
     let focusTrapHandler = null;
     let lastFocusedElement = null;
+    let audioUnlocked = false;
+    let audioStarted = false;
+    let fadeFrame = null;
+    const AMBIENCE_TARGET_VOLUME = 0.18;
 
     const els = {
       display: document.getElementById("display"),
@@ -540,7 +549,8 @@
       codeHint: document.getElementById("codeHint"),
       blackout: document.getElementById("blackout"),
       ending: document.getElementById("ending"),
-      endingCard: document.getElementById("endingCard")
+      endingCard: document.getElementById("endingCard"),
+      bgAmbience: document.getElementById("bgAmbience")
     };
 
     function ensureAudioContext() {
@@ -549,11 +559,76 @@
       return audioCtx;
     }
 
+    // FADE IN / FADE OUT
+    function stopAmbienceFade() {
+      if (!fadeFrame) return;
+      cancelAnimationFrame(fadeFrame);
+      fadeFrame = null;
+    }
+
+    function fadeAmbienceTo(targetVolume, duration = 1000, onDone = null) {
+      stopAmbienceFade();
+      const startVolume = els.bgAmbience.volume;
+      const startedAt = performance.now();
+
+      const tick = (now) => {
+        const t = Math.min(1, (now - startedAt) / duration);
+        els.bgAmbience.volume = startVolume + (targetVolume - startVolume) * t;
+        if (t < 1) {
+          fadeFrame = requestAnimationFrame(tick);
+          return;
+        }
+        fadeFrame = null;
+        if (onDone) onDone();
+      };
+
+      fadeFrame = requestAnimationFrame(tick);
+    }
+
+    function startAmbienceIfAllowed() {
+      if (!audioUnlocked || state.muted || audioStarted) return;
+      audioStarted = true;
+      els.bgAmbience.volume = 0;
+      els.bgAmbience.play().then(() => {
+        fadeAmbienceTo(AMBIENCE_TARGET_VOLUME, 3000);
+      }).catch(() => {
+        audioStarted = false;
+      });
+    }
+
+    function resumeAmbienceIfAllowed() {
+      if (!audioUnlocked || state.muted) return;
+      els.bgAmbience.play().catch(() => {});
+      fadeAmbienceTo(AMBIENCE_TARGET_VOLUME, 3000);
+      audioStarted = true;
+    }
+
+    function pauseAmbienceForMute() {
+      stopAmbienceFade();
+      els.bgAmbience.volume = 0;
+      els.bgAmbience.pause();
+    }
+
+    function softenAmbienceAtEnding() {
+      if (state.muted || els.bgAmbience.paused) return;
+      fadeAmbienceTo(0, 1000, () => {
+        els.bgAmbience.pause();
+      });
+    }
+
+    // AUDIO UNLOCK / START
     function initAudioOnFirstInteraction() {
-      document.addEventListener("pointerdown", () => {
+      const unlockAudio = () => {
+        if (audioUnlocked) return;
+        audioUnlocked = true;
         const ctx = ensureAudioContext();
         if (ctx.state === "suspended") ctx.resume();
-      }, { once: true });
+        startAmbienceIfAllowed();
+      };
+
+      document.addEventListener("pointerdown", unlockAudio, { once: true });
+      document.addEventListener("touchstart", unlockAudio, { once: true });
+      document.addEventListener("keydown", unlockAudio, { once: true });
     }
 
     function playTick() {
@@ -758,6 +833,8 @@
         updateAmbientHint();
         updateMeters();
         els.muteBtn.textContent = `Sound: ${state.muted ? "MUTED" : "LIVE"}`;
+        if (state.muted) pauseAmbienceForMute();
+        else if (audioUnlocked) resumeAmbienceIfAllowed();
         return true;
       } catch {
         return false;
@@ -1128,6 +1205,7 @@
       stopMaintenanceAlivePulse();
       updateMaintenanceHatchUI();
       setMode("END");
+      softenAmbienceAtEnding();
       let title = "";
       let body = "";
       if (type === "secret") {
@@ -1236,11 +1314,14 @@
         if (e.target === els.inspectModal) closeInspect();
       });
 
+      // SOUND TOGGLE INTEGRATION
       els.muteBtn.addEventListener("click", () => {
         state.muted = !state.muted;
         if (!state.muted) ensureAudioContext();
         if (state.muted) stopMaintenanceAlivePulse();
         else if (flicker13Active) startMaintenanceAlivePulse();
+        if (state.muted) pauseAmbienceForMute();
+        else if (audioUnlocked) resumeAmbienceIfAllowed();
         els.muteBtn.textContent = `Sound: ${state.muted ? "MUTED" : "LIVE"}`;
         saveGame();
       });
