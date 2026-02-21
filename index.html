@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Elevator to Floor 13</title>
   <style>
     :root {
@@ -36,11 +36,17 @@
       height: 100%;
       display: grid;
       grid-template-columns: 1.1fr .9fr;
+      grid-template-rows: auto 1fr;
+      grid-template-areas:
+        "left right"
+        "log right";
       overflow: hidden;
       background: linear-gradient(160deg, #0f0f0f, #0a0a0a 60%, #080808);
     }
 
     .left, .right { padding: 1.1rem; position: relative; }
+    .left { grid-area: left; }
+    .right { grid-area: right; }
     .left { border-right: 1px solid #2f2f2f; }
 
     .display-wrap {
@@ -92,6 +98,8 @@
     .doors.moving .right { transform: translateX(92%); }
 
     .narration {
+      grid-area: log;
+      margin: 0 1.1rem 1.1rem;
       min-height: 145px;
       max-height: 40vh;
       overflow-y: auto;
@@ -118,8 +126,17 @@
       border-radius: 7px;
       padding: .48rem .72rem;
       cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
     }
     button:hover:enabled { background: #2b2b2b; }
+    button:active:enabled,
+    button:focus-visible {
+      background: #343434;
+      outline: 2px solid rgba(242,74,102,.55);
+      outline-offset: 1px;
+    }
     button:disabled { opacity: .5; cursor: not-allowed; }
 
     .panel-zone {
@@ -138,11 +155,15 @@
     }
     .floor-btn {
       min-height: 56px;
+      min-width: 56px;
       font-size: 1.04rem;
       font-weight: 700;
       border-radius: 10px;
       border-color: #646464;
       background: radial-gradient(circle at 50% 30%, #3c3c3c, #1b1b1b 62%);
+    }
+    .floor-btn.recent-hit {
+      box-shadow: 0 0 0 2px rgba(242,74,102,.35) inset;
     }
 
     .scratch {
@@ -221,11 +242,16 @@
     }
     .display.flicker13-rapid { animation: f13Rapid 88ms steps(2,end) infinite; }
     .display.flicker13-pulse { animation: f13Pulse 760ms ease-in-out infinite; }
+    .display.sequence-flash { animation: sequenceFlash .22s ease-in-out 2; }
     @keyframes f13Rapid {
       0%,100%{opacity:1} 28%{opacity:.28} 50%{opacity:.76} 74%{opacity:.38}
     }
     @keyframes f13Pulse {
       0%,100%{opacity:1} 45%{opacity:.64} 70%{opacity:.86}
+    }
+    @keyframes sequenceFlash {
+      0%,100% { filter: brightness(1); text-shadow: 0 0 7px rgba(242,74,102,.58); }
+      50% { filter: brightness(1.7); text-shadow: 0 0 13px rgba(118,214,166,.8); }
     }
 
     .blackout {
@@ -312,6 +338,52 @@
     }
 
     .hidden { display: none; }
+
+    /* MOBILE layout CSS/media queries */
+    @media (max-width: 899px) {
+      html, body { height: auto; min-height: 100%; }
+      .app {
+        min-height: 100dvh;
+        height: auto;
+        overflow: auto;
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto auto;
+        grid-template-areas:
+          "left"
+          "right"
+          "log";
+      }
+      .left, .right {
+        border-right: 0;
+        border-bottom: 1px solid #2f2f2f;
+        padding: .9rem;
+      }
+      .right {
+        grid-template-rows: auto 1fr auto;
+        gap: .8rem;
+      }
+      .top-controls { justify-content: flex-start; }
+      .narration {
+        margin: .9rem;
+        min-height: 24vh;
+        max-height: 28vh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      /* floor button sizing rules for mobile */
+      .floor-grid {
+        grid-template-columns: repeat(3, minmax(72px, 1fr));
+        gap: .85rem;
+      }
+      .floor-btn {
+        min-height: 64px;
+        min-width: 64px;
+        font-size: 1.12rem;
+      }
+      body {
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+    }
   </style>
 </head>
 <body>
@@ -328,7 +400,6 @@
         <div class="door left"></div>
         <div class="door right"></div>
       </div>
-      <div class="narration" id="narration"></div>
     </div>
 
     <div class="right">
@@ -351,6 +422,8 @@
         <span id="flickerHint"></span>
       </div>
     </div>
+
+    <div class="narration" id="narration"></div>
   </div>
 
   <div class="blackout" id="blackout"></div>
@@ -390,7 +463,10 @@
 
   <script>
     const floors = Array.from({ length: 13 }, (_, i) => ({ id: i + 1, label: String(i + 1) }));
-    const GOOD_SEQUENCE = [4, 3, 2, 1];
+    // checkSequences() and sequence definitions
+    const RECENT_PRESS_LIMIT = 8;
+    const SCRATCH_SEQUENCE = [4, 2, 9];
+    const DESCENDING_CHECK_SEQUENCE = [4, 3, 2, 1];
 
     const state = {
       mode: "IDLE",
@@ -402,7 +478,8 @@
       alive: true,
       ending: null,
       messageLevel: 0,
-      pressedHistory: [],
+      recentPresses: [],
+      calmRidesRemaining: 0,
       clueFound: {
         scratchesSeen: false,
         certSeen: false,
@@ -410,9 +487,12 @@
         serialSeen: false,
         scratchesSequenceDone: false
       },
+      flags: {
+        scratchSequenceDone: false
+      },
       foundDigits: { scratch: null, cert: null, intercom: null, serial: null },
       endingsAchieved: { good: false, bad: false, secret: false },
-      saveVersion: 3
+      saveVersion: 4
     };
 
     let flicker13Active = false;
@@ -644,6 +724,11 @@
       try {
         const data = JSON.parse(raw);
         Object.assign(state, data);
+        if (!Array.isArray(state.recentPresses)) state.recentPresses = Array.isArray(state.pressedHistory) ? state.pressedHistory.slice(-RECENT_PRESS_LIMIT) : [];
+        state.recentPresses = state.recentPresses.slice(-RECENT_PRESS_LIMIT);
+        if (typeof state.calmRidesRemaining !== "number") state.calmRidesRemaining = 0;
+        if (!state.flags) state.flags = { scratchSequenceDone: !!state.clueFound?.scratchesSequenceDone };
+        if (typeof state.flags.scratchSequenceDone !== "boolean") state.flags.scratchSequenceDone = !!state.clueFound?.scratchesSequenceDone;
         setMode("IDLE");
         state.alive = true;
         state.ending = null;
@@ -686,13 +771,53 @@
       els.ambientHint.textContent = "The cab remembers patterns better than people.";
     }
 
-    function updateDescendingProgress(floor) {
-      state.pressedHistory.push(floor);
-      if (state.pressedHistory.length > 8) state.pressedHistory.shift();
-      const tail = state.pressedHistory.slice(-GOOD_SEQUENCE.length);
-      const matched = tail.length === GOOD_SEQUENCE.length && tail.every((v, i) => v === GOOD_SEQUENCE[i]);
-      if (matched && state.fear <= 40 && !state.ending) {
+    function matchesRecentSequence(sequence) {
+      if (state.recentPresses.length < sequence.length) return false;
+      const tail = state.recentPresses.slice(-sequence.length);
+      return tail.every((v, i) => v === sequence[i]);
+    }
+
+    function pulseDisplayOnce() {
+      els.display.classList.remove("sequence-flash");
+      void els.display.offsetWidth;
+      els.display.classList.add("sequence-flash");
+      setTimeout(() => els.display.classList.remove("sequence-flash"), 480);
+      playTick();
+    }
+
+    function updateRecentHitButton(floor) {
+      document.querySelectorAll(".floor-btn").forEach((btn) => btn.classList.toggle("recent-hit", Number(btn.dataset.floor) === floor));
+    }
+
+    function runScratchSequenceReward() {
+      if (state.flags.scratchSequenceDone) return;
+      state.flags.scratchSequenceDone = true;
+      state.clueFound.scratchesSequenceDone = true;
+      state.calmRidesRemaining = 2;
+      log("The cab remembers patterns better than people.");
+      if (!state.clueFound.serialSeen) {
+        log("A hidden etch appears by the hinge: INSPECTION SERIAL: MX-73A.");
+        state.foundDigits.serial = "3";
+        state.clueFound.serialSeen = true;
+      }
+      pulseDisplayOnce();
+    }
+
+    function runDescendingCheckOutcome() {
+      pulseDisplayOnce();
+      if (state.fear <= 40 && !state.ending) {
         triggerEnding("good");
+        return;
+      }
+      log("Too loud in your chest. Try again calmer.");
+    }
+
+    function checkSequences() {
+      if (matchesRecentSequence(SCRATCH_SEQUENCE)) {
+        runScratchSequenceReward();
+      }
+      if (matchesRecentSequence(DESCENDING_CHECK_SEQUENCE)) {
+        runDescendingCheckOutcome();
       }
     }
 
@@ -708,15 +833,6 @@
         state.clueFound.scratchesSeen = true;
         // clue digit extraction rules: scratches source => take the middle value from 4/2/9 => digit 2.
         state.foundDigits.scratch = "2";
-      }
-      const tail = state.pressedHistory.slice(-3);
-      if (!state.clueFound.scratchesSequenceDone && tail.length === 3 && tail.join(",") === "4,2,9") {
-        state.clueFound.scratchesSequenceDone = true;
-        state.fear = Math.max(0, state.fear - 4);
-        log("A hidden etch appears by the hinge: INSPECTION SERIAL: MX-73A.");
-        // clue digit extraction rules: maintenance serial source => use the lower digit in serial MX-73A => digit 3.
-        state.foundDigits.serial = "3";
-        state.clueFound.serialSeen = true;
       }
       updateAmbientHint();
       updateMeters();
@@ -806,17 +922,25 @@
       playTick();
       setMode("MOVING");
       state.suspicion = Math.min(100, state.suspicion + 2);
-      state.fear = Math.min(100, state.fear + (target === 13 ? 10 : 1));
+      let fearDelta = target === 13 ? 10 : 1;
+      if (state.calmRidesRemaining > 0) {
+        fearDelta = Math.max(0, fearDelta - 1);
+        state.calmRidesRemaining -= 1;
+      }
+      state.fear = Math.min(100, state.fear + fearDelta);
       els.doors.classList.add("moving");
       playTravelHum();
       await sleep(940);
       state.currentFloor = target;
       state.displayedFloor = String(target);
+      state.recentPresses.push(target);
+      if (state.recentPresses.length > RECENT_PRESS_LIMIT) state.recentPresses.shift();
+      updateRecentHitButton(target);
       log(`Doors part at floor ${target}.`);
       if (Math.random() < 0.42 || target === 13) {
         await randomTravelEvent();
       }
-      updateDescendingProgress(target);
+      checkSequences();
       setMode("IDLE");
       els.doors.classList.remove("moving");
       updateAmbientHint();
@@ -992,7 +1116,8 @@
         alive: true,
         ending: null,
         messageLevel: 0,
-        pressedHistory: [],
+        recentPresses: [],
+        calmRidesRemaining: 0,
         clueFound: {
           scratchesSeen: false,
           certSeen: false,
@@ -1000,10 +1125,13 @@
           serialSeen: false,
           scratchesSequenceDone: false
         },
+        flags: {
+          scratchSequenceDone: false
+        },
         foundDigits: { scratch: null, cert: null, intercom: null, serial: null },
         endingsAchieved: { good: false, bad: false, secret: false },
         muted: state.muted,
-        saveVersion: 3
+        saveVersion: 4
       });
       flicker13Active = false;
       maintenanceModalOpen = false;
