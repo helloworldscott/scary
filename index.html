@@ -323,10 +323,13 @@
       display: none;
       align-items: center;
       justify-content: center;
-      z-index: 60;
+      z-index: 120;
       padding: 1rem;
+      pointer-events: none;
     }
     .modal.active, .ending.active { display: flex; }
+    .modal.active { pointer-events: auto; }
+    .modal .card { pointer-events: auto; }
     .ending {
       pointer-events: none;
       overflow: hidden;
@@ -375,8 +378,45 @@
     .jump.active { display: flex; }
 
     .hidden { display: none; }
-    .keypad-row { display: flex; gap: .5rem; margin-bottom: .5rem; }
-    .code-input { width: 100%; margin-bottom: .7rem; padding: .5rem; background: #050505; color: #f4f4f4; border: 1px solid #555; }
+    .maintenance-card {
+      width: min(380px, 92vw);
+      animation: modalPopIn .22s ease;
+      transform-origin: center;
+    }
+    @keyframes modalPopIn {
+      0% { transform: scale(.9) translateY(10px); opacity: 0; }
+      100% { transform: scale(1) translateY(0); opacity: 1; }
+    }
+    .keypad-display {
+      width: 100%;
+      margin: .4rem 0 .9rem;
+      padding: .55rem;
+      border: 1px solid #555;
+      border-radius: 7px;
+      text-align: center;
+      letter-spacing: .4rem;
+      font-size: 1.25rem;
+      background: #050505;
+      color: #f4f4f4;
+      min-height: 2.6rem;
+    }
+    .keypad-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: .5rem;
+      margin-bottom: .55rem;
+    }
+    .keypad-grid button,
+    .keypad-actions button {
+      min-height: 2.2rem;
+      font-weight: 600;
+    }
+    .keypad-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: .5rem;
+      margin-top: .45rem;
+    }
   </style>
 </head>
 <body>
@@ -431,16 +471,21 @@
     </div>
   </div>
 
-  <div class="modal" id="codeModal">
-    <div class="card">
-      <h3 style="margin-top:0;">Maintenance Override Keypad</h3>
-      <p>Enter 4-digit service code.</p>
-      <input class="code-input" id="codeInput" maxlength="4" placeholder="----" />
-      <div class="keypad-row">
-        <button id="submitCode">Submit</button>
-        <button id="closeCode">Cancel</button>
+  <div class="modal" id="codeModal" aria-hidden="true">
+    <div class="card maintenance-card" role="dialog" aria-modal="true" aria-labelledby="maintenanceTitle">
+      <h3 id="maintenanceTitle" style="margin-top:0;">MAINTENANCE OVERRIDE</h3>
+      <p id="codeHint" style="font-size:.9rem;color:#bfbfbf;">Enter 4-digit service code.</p>
+      <div class="keypad-display" id="codeDisplay">_ _ _ _</div>
+      <div class="keypad-grid" id="keypadGrid">
+        <button data-digit="1">1</button><button data-digit="2">2</button><button data-digit="3">3</button>
+        <button data-digit="4">4</button><button data-digit="5">5</button><button data-digit="6">6</button>
+        <button data-digit="7">7</button><button data-digit="8">8</button><button data-digit="9">9</button>
+        <button id="clearCode">Clear</button><button data-digit="0">0</button><button id="backCode">Backspace</button>
       </div>
-      <p id="codeHint" style="font-size:.9rem;color:#bfbfbf;">Digits found: none.</p>
+      <div class="keypad-actions">
+        <button id="submitCode">Submit</button>
+        <button id="closeCode">Close</button>
+      </div>
     </div>
   </div>
 
@@ -487,13 +532,14 @@
       displayedFloor: "1",
       fear: 0,
       suspicion: 0,
-      codeDigitsFound: [],
+      foundDigits: [],
       clueFound: { panel: false, cert: false, scratch: false, message: false },
+      secretEndingUnlocked: false,
       blockedFloors: [],
       pressedHistory: [],
       messageLevel: 0,
       muted: true,
-      saveVersion: 1,
+      saveVersion: 2,
       alive: true,
       ending: null
     };
@@ -503,6 +549,9 @@
     const FLICKER13_RAPID_MS = 500;
     let flicker13Active = false;
     let hatchPromptLoggedThisFlicker = false;
+    let maintenanceInput = "";
+    let maintenanceModalOpen = false;
+    let lastFocusedElement = null;
 
     const els = {
       display: document.getElementById("display"),
@@ -524,7 +573,10 @@
       maintenanceHatch: document.getElementById("maintenanceHatch"),
       maintenanceTooltip: document.getElementById("maintenanceTooltip"),
       codeModal: document.getElementById("codeModal"),
-      codeInput: document.getElementById("codeInput"),
+      keypadGrid: document.getElementById("keypadGrid"),
+      codeDisplay: document.getElementById("codeDisplay"),
+      clearCode: document.getElementById("clearCode"),
+      backCode: document.getElementById("backCode"),
       submitCode: document.getElementById("submitCode"),
       closeCode: document.getElementById("closeCode"),
       codeHint: document.getElementById("codeHint"),
@@ -574,6 +626,21 @@
       gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
       osc.connect(gain); gain.connect(masterGain);
       osc.start(now); osc.stop(now + 0.07);
+    }
+
+    function playMaintenanceTick() {
+      if (!audioGate()) return;
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "square";
+      osc.frequency.setValueAtTime(920, now);
+      osc.frequency.exponentialRampToValueAtTime(680, now + 0.08);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.025, now + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.1);
+      osc.connect(gain); gain.connect(masterGain);
+      osc.start(now); osc.stop(now + 0.11);
     }
 
     function playTravelHum() {
@@ -711,7 +778,7 @@
       els.display.textContent = state.displayedFloor;
       document.querySelectorAll(".floor-btn").forEach(b => {
         const f = +b.dataset.floor;
-        b.disabled = state.mode !== "IDLE" || state.blockedFloors.includes(f) || !state.alive;
+        b.disabled = state.mode !== "IDLE" || state.blockedFloors.includes(f) || !state.alive || maintenanceModalOpen;
       });
     }
 
@@ -729,6 +796,8 @@
       if (!raw) return false;
       try {
         const data = JSON.parse(raw);
+        if (Array.isArray(data.codeDigitsFound) && !Array.isArray(data.foundDigits)) data.foundDigits = data.codeDigitsFound;
+        if (typeof data.secretEndingUnlocked !== "boolean") data.secretEndingUnlocked = data.ending === "secret";
         Object.assign(state, data);
         log("You remember where the doors last opened.");
         updateRepeatMessage();
@@ -808,8 +877,9 @@
 
     function maintenanceReveal() {
       state.clueFound.panel = true;
-      const nextDigit = CONFIG.serviceCode[state.codeDigitsFound.length];
-      if (nextDigit && !state.codeDigitsFound.includes(nextDigit)) state.codeDigitsFound.push(nextDigit);
+      state.clueFound.scratch = true;
+      const nextDigit = CONFIG.serviceCode[state.foundDigits.length];
+      if (nextDigit) state.foundDigits.push(nextDigit);
       log(`Maintenance panel jerks open. Etched inside: ${nextDigit || "RUST"}.`);
       saveGame();
     }
@@ -833,7 +903,7 @@
       { name: "swapLabels", prob: 0.16, can: () => true, do: swapRandomLabels },
       { name: "flash13", prob: 0.18, can: () => true, do: forcedThirteenFlicker },
       { name: "intercom", prob: 0.2, can: () => true, do: intercomWarning },
-      { name: "maintOpen", prob: 0.13, can: () => state.codeDigitsFound.length < 4, do: maintenanceReveal },
+      { name: "maintOpen", prob: 0.13, can: () => state.foundDigits.length < 4, do: maintenanceReveal },
       { name: "lightsOut", prob: 0.14, can: () => true, do: lightsOut },
       { name: "overweight", prob: 0.12, can: () => state.blockedFloors.length === 0, do: overweightBlock }
     ];
@@ -879,11 +949,87 @@
       return false;
     }
 
-    function maybeOpenCodeModal() {
-      if (state.codeDigitsFound.length === 4 && state.displayedFloor === "13" && state.clueFound.panel) {
-        els.codeHint.textContent = `Digits found: ${state.codeDigitsFound.join(" ")}`;
-        els.codeModal.classList.add("active");
+    function getFoundCodeMask() {
+      return CONFIG.serviceCode.split("").map((digit, idx) => state.foundDigits[idx] || "_").join(" ");
+    }
+
+    function hasFullMaintenanceCode() {
+      return state.foundDigits.length === 4 && state.foundDigits.every((digit, idx) => digit === CONFIG.serviceCode[idx]);
+    }
+
+    function allMaintenanceCluesCollected() {
+      return hasFullMaintenanceCode() && state.clueFound.cert && state.clueFound.message && state.clueFound.scratch;
+    }
+
+    // render/open/close keypad modal
+    function renderKeypadModal() {
+      const slots = ["_", "_", "_", "_"];
+      for (let i = 0; i < maintenanceInput.length; i++) slots[i] = "●";
+      els.codeDisplay.textContent = slots.join(" ");
+      els.codeHint.textContent = `CODE: ${getFoundCodeMask()}`;
+    }
+
+    function trapMaintenanceFocus(e) {
+      if (!maintenanceModalOpen || e.key !== "Tab") return;
+      const focusable = els.codeModal.querySelectorAll('button:not([disabled])');
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
       }
+    }
+
+    function openKeypadModal() {
+      maintenanceInput = "";
+      maintenanceModalOpen = true;
+      lastFocusedElement = document.activeElement;
+      renderKeypadModal();
+      els.codeModal.classList.add("active");
+      els.codeModal.setAttribute("aria-hidden", "false");
+      updateMeters();
+      playMaintenanceTick();
+      const firstBtn = els.keypadGrid.querySelector("button");
+      if (firstBtn) firstBtn.focus();
+    }
+
+    function closeKeypadModal() {
+      maintenanceModalOpen = false;
+      els.codeModal.classList.remove("active");
+      els.codeModal.setAttribute("aria-hidden", "true");
+      maintenanceInput = "";
+      updateMeters();
+      if (lastFocusedElement && typeof lastFocusedElement.focus === "function") lastFocusedElement.focus();
+    }
+
+    // openMaintenance()
+    function openMaintenance() {
+      if (!flicker13Active) {
+        log("Dead panel. It won’t budge.");
+        return;
+      }
+      state.clueFound.panel = true;
+      state.clueFound.scratch = true;
+      if (!allMaintenanceCluesCollected()) {
+        log("The latch loosens… but you don’t have the full code.");
+        maintenanceInput = "";
+        renderKeypadModal();
+        els.codeModal.classList.add("active");
+        els.codeModal.setAttribute("aria-hidden", "false");
+        playMaintenanceTick();
+        setTimeout(() => {
+          if (!maintenanceModalOpen) {
+            els.codeModal.classList.remove("active");
+            els.codeModal.setAttribute("aria-hidden", "true");
+          }
+        }, 1100);
+        return;
+      }
+      openKeypadModal();
     }
 
     function endGame(type) {
@@ -897,8 +1043,9 @@
         log("Override sequence accepted. Route changed to LOBBY.");
       } else if (type === "secret") {
         state.displayedFloor = "SERVICE LADDER";
-        html = `<h2>Secret Ending</h2><p>You pry open the service hatch and climb down the ladder. Behind you, the elevator descends to 13 on its own.</p><p><strong>Clever escape achieved.</strong></p><button onclick="location.reload()">Play Again</button>`;
-        log("Service ladder unlocked by full code.");
+        state.secretEndingUnlocked = true;
+        html = `<h2>SERVICE LADDER</h2><p>You climb into the shaft while the elevator screams below.</p><p><strong>The maintenance route accepts you and nothing else.</strong></p><button onclick="location.reload()">Play Again</button>`;
+        log("You climb into the shaft while the elevator screams below.");
       } else {
         state.displayedFloor = "13";
         playBadEndingSound();
@@ -959,16 +1106,15 @@
       if (state.blockedFloors.length) state.blockedFloors = [];
       els.doors.classList.remove("closing");
       setMode("IDLE");
-      maybeOpenCodeModal();
       saveGame();
       updateMeters();
     }
 
     function resetGame() {
       Object.assign(state, {
-        mode: "IDLE", currentFloor: 1, displayedFloor: "1", fear: 0, suspicion: 0, codeDigitsFound: [],
+        mode: "IDLE", currentFloor: 1, displayedFloor: "1", fear: 0, suspicion: 0, foundDigits: [],
         clueFound: { panel: false, cert: false, scratch: false, message: false }, blockedFloors: [],
-        pressedHistory: [], messageLevel: 0, alive: true, ending: null
+        pressedHistory: [], messageLevel: 0, alive: true, ending: null, secretEndingUnlocked: false
       });
       floors.forEach((f, idx) => f.label = String(idx + 1));
       els.jump.classList.remove("active");
@@ -990,40 +1136,64 @@
 
     els.maintenanceHatch.addEventListener("click", () => {
       playButtonTick();
-      if (!flicker13Active) {
-        log("Dead panel. It won't budge.");
-        return;
-      }
-      state.clueFound.panel = true;
-      log("You pry open the hidden maintenance panel.");
-      if (state.displayedFloor === "13" && state.codeDigitsFound.length === 4) {
-        maybeOpenCodeModal();
+      openMaintenance();
+      saveGame();
+    });
+
+    els.keypadGrid.addEventListener("click", (e) => {
+      const btn = e.target.closest("button");
+      if (!btn || !maintenanceModalOpen) return;
+      const digit = btn.dataset.digit;
+      if (!digit || maintenanceInput.length >= 4) return;
+      playButtonTick();
+      maintenanceInput += digit;
+      renderKeypadModal();
+    });
+
+    els.clearCode.addEventListener("click", () => {
+      if (!maintenanceModalOpen) return;
+      playButtonTick();
+      maintenanceInput = "";
+      renderKeypadModal();
+    });
+
+    els.backCode.addEventListener("click", () => {
+      if (!maintenanceModalOpen) return;
+      playButtonTick();
+      maintenanceInput = maintenanceInput.slice(0, -1);
+      renderKeypadModal();
+    });
+
+    // submit handler + secret ending trigger
+    els.submitCode.addEventListener("click", () => {
+      if (!maintenanceModalOpen) return;
+      playButtonTick();
+      const code = maintenanceInput;
+      if (code === state.foundDigits.join("")) {
+        closeKeypadModal();
+        state.secretEndingUnlocked = true;
+        log("You climb into the shaft while the elevator screams below.");
+        endGame("secret");
       } else {
-        const d = CONFIG.serviceCode[state.codeDigitsFound.length];
-        if (d && !state.codeDigitsFound.includes(d)) {
-          state.codeDigitsFound.push(d);
-          log(`Scratched behind the panel: ${d}`);
-        } else {
-          log("Only old wires and a burnt fuse remain.");
-        }
+        closeKeypadModal();
+        log("ACCESS DENIED");
+        state.fear = Math.min(100, state.fear + 15);
+        state.suspicion = Math.min(100, state.suspicion + 10);
+        updateMeters();
       }
       saveGame();
     });
 
-    els.submitCode.addEventListener("click", () => {
-      playButtonTick();
-      const code = els.codeInput.value.trim();
-      if (code === CONFIG.serviceCode) {
-        els.codeModal.classList.remove("active");
-        endGame("secret");
+    els.closeCode.addEventListener("click", () => {
+      if (maintenanceModalOpen) {
+        closeKeypadModal();
       } else {
-        state.fear = Math.min(100, state.fear + 12);
-        state.suspicion = Math.min(100, state.suspicion + 8);
-        log("Wrong code. The cab drops half a floor and slams to a stop.");
-        updateMeters();
+        els.codeModal.classList.remove("active");
+        els.codeModal.setAttribute("aria-hidden", "true");
       }
     });
-    els.closeCode.addEventListener("click", () => els.codeModal.classList.remove("active"));
+
+    document.addEventListener("keydown", trapMaintenanceFocus);
 
     els.muteBtn.addEventListener("click", () => {
       ensureAudioContext();
