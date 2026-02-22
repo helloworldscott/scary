@@ -16,8 +16,8 @@
     * { box-sizing: border-box; }
     html, body { margin: 0; width: 100%; height: 100%; font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); color: var(--text); }
 
-    #threeViewport { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; display: block; }
-    #sceneOverlay { position: fixed; inset: 0; z-index: 1; pointer-events: none; background: radial-gradient(circle at center, rgba(0,0,0,.08) 18%, rgba(0,0,0,.7) 100%); opacity: .28; transition: opacity .25s ease; }
+    #threeViewport { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; display: block; filter: brightness(1.28) contrast(1.08) saturate(1.05); }
+    #sceneOverlay { position: fixed; inset: 0; z-index: 1; pointer-events: none; background: radial-gradient(circle at center, rgba(0,0,0,.03) 24%, rgba(0,0,0,.45) 100%); opacity: .16; transition: opacity .25s ease; }
 
     body::before {
       content: "";
@@ -28,7 +28,7 @@
         radial-gradient(circle at center, transparent 34%, rgba(0,0,0,.68) 100%),
         repeating-linear-gradient(0deg, rgba(255,255,255,.025), rgba(255,255,255,.025) 1px, transparent 1px, transparent 3px);
       mix-blend-mode: screen;
-      opacity: .35;
+      opacity: .16;
       animation: grain .16s steps(2) infinite;
       z-index: 25;
     }
@@ -44,7 +44,7 @@
         "left right"
         "log right";
       overflow: hidden;
-      background: transparent;
+      background: rgba(4, 6, 10, .2);
       position: relative;
       z-index: 2;
     }
@@ -59,7 +59,7 @@
     .display-wrap {
       border: 2px solid #2f2f2f;
       border-radius: 10px;
-      background: rgba(0, 0, 0, .62);
+      background: rgba(0, 0, 0, .45);
       padding: .95rem;
       margin-bottom: .95rem;
       box-shadow: inset 0 0 22px rgba(0,0,0,.72), 0 0 24px rgba(242,74,102,.2);
@@ -110,7 +110,7 @@
       min-height: 145px;
       max-height: 32vh;
       overflow-y: auto;
-      background: rgba(8, 10, 12, .82);
+      background: rgba(8, 10, 12, .62);
       border: 1px solid #2f2f2f;
       border-radius: 8px;
       padding: .68rem;
@@ -126,7 +126,7 @@
       display: grid;
       grid-template-rows: auto auto 1fr auto;
       gap: .9rem;
-      background: linear-gradient(180deg, rgba(21,21,21,.55), rgba(8,10,12,.55));
+      background: linear-gradient(180deg, rgba(21,21,21,.32), rgba(8,10,12,.3));
     }
     .top-controls { display: flex; gap: .5rem; justify-content: flex-end; flex-wrap: wrap; }
     button {
@@ -154,7 +154,7 @@
       border: 1px solid #343434;
       border-radius: 10px;
       padding: .8rem;
-      background: linear-gradient(170deg, rgba(17,18,22,.68), rgba(8,10,12,.72));
+      background: linear-gradient(170deg, rgba(17,18,22,.45), rgba(8,10,12,.5));
       min-height: 315px;
     }
     .floor-grid {
