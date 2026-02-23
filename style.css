@@ -1,0 +1,77 @@
+:root {
+  --bg: #08090d;
+  --panel: #12141b;
+  --text: #e8e8ee;
+  --muted: #9ca0b3;
+  --accent: #8ba2ff;
+  --danger: #dc5573;
+  --ok: #7fb19c;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: radial-gradient(circle at top, #11131b, var(--bg));
+  color: var(--text);
+  font: 16px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+.app { max-width: 860px; margin: 0 auto; min-height: 100vh; padding: 0.8rem; }
+.topbar { background: var(--panel); border: 1px solid #1f2230; padding: 0.7rem; border-radius: 14px; position: sticky; top: 0.5rem; z-index: 5; }
+h1 { margin: 0 0 0.4rem; font-size: 1.2rem; letter-spacing: 0.16em; }
+.stats { display: grid; gap: 0.4rem; grid-template-columns: auto 1fr auto auto; align-items: center; }
+.stat span { display: block; color: var(--muted); font-size: 0.75rem; }
+.stat strong { font-size: 0.9rem; }
+.meter { height: 8px; background: #272c3f; border-radius: 999px; overflow: hidden; }
+#fearMeter { height: 100%; width: 0%; background: linear-gradient(90deg, #53d19d, #e1c73f, #db4669); transition: width .3s; }
+.screen { margin-top: 0.8rem; background: rgba(18,20,27,.9); border: 1px solid #1f2230; border-radius: 14px; padding: 0.8rem; }
+.hidden { display: none !important; }
+.subtitle { margin-top: 0; color: var(--muted); }
+.floor-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.5rem; }
+.btn {
+  border: 1px solid #2a3043; background: #1a1f2d; color: var(--text); padding: 0.7rem;
+  border-radius: 10px; cursor: pointer; transition: transform .08s, background .2s, border-color .2s;
+}
+.btn:active { transform: scale(0.98); }
+.btn:hover { background: #252c3f; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.ghost { background: #18242c; border-color: #2d4b5b; }
+.danger { background: #2b1820; border-color: #623344; }
+.hub-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.8rem; }
+.log { margin-top: 0.8rem; min-height: 82px; background: #0f1118; border-radius: 10px; padding: 0.5rem; color: #b9bfd3; font-size: 0.9rem; }
+.log p { margin: 0.25rem 0; }
+.door-wrap { position: relative; overflow: hidden; border-radius: 12px; background: #0d1018; min-height: 65vh; }
+.scene-core { padding: 0.5rem; }
+.door { position: absolute; top: 0; bottom: 0; width: 50%; background: linear-gradient(180deg, #1f2333, #11131b); z-index: 3; transition: transform .55s ease; }
+.door.left { left: 0; border-right: 1px solid #32384f; }
+.door.right { right: 0; border-left: 1px solid #32384f; }
+.door-wrap.open .door.left { transform: translateX(-100%); }
+.door-wrap.open .door.right { transform: translateX(100%); }
+.image-frame { aspect-ratio: 16 / 9; background: #0b0d12; border: 1px solid #24283a; border-radius: 12px; overflow: hidden; position: relative; }
+.image-frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.img-fallback {
+  position: absolute; inset: 0; display: grid; place-items: center; font-weight: 700; letter-spacing: .15em;
+  background: linear-gradient(135deg, #2a2f41, #121625 45%, #3b2430); color: #d7d9e8;
+}
+.tags { margin: 0.45rem 0; color: #a5b5df; font-size: 0.83rem; }
+.narrative p { margin: 0.5rem 0; }
+.options { display: grid; gap: 0.45rem; margin-top: 0.6rem; }
+.result { margin-top: 0.6rem; color: #d2d8ef; min-height: 1.3rem; }
+.glitch { animation: glitch .18s steps(2, end) infinite; }
+@keyframes glitch {
+  0% { text-shadow: 0 0 0 transparent; transform: translateX(0); }
+  50% { text-shadow: -1px 0 #7bb0ff, 1px 0 #dc5573; transform: translateX(0.6px); }
+  100% { text-shadow: 1px 0 #7bb0ff, -1px 0 #dc5573; transform: translateX(-0.6px); }
+}
+.jumpscare {
+  position: fixed; inset: 0; z-index: 30; background: rgba(255,255,255,0.06); backdrop-filter: blur(1.4px);
+  display: grid; place-items: center; animation: flash .18s alternate 3;
+}
+.jump-text { font-size: clamp(1.4rem, 5vw, 2.8rem); letter-spacing: .13em; font-weight: 800; color: #ffe6ec; text-shadow: 0 0 16px #d54668; }
+.shake { animation: shake .28s linear 2; }
+@keyframes flash { from { background: rgba(255,255,255,.18); } to { background: rgba(10,6,9,.85); } }
+@keyframes shake {
+  0% { transform: translate(0,0); } 25% { transform: translate(4px,-3px); }
+  50% { transform: translate(-5px,2px); } 75% { transform: translate(3px,3px); } 100% { transform: translate(0,0); }
+}
+@media (min-width: 700px) {
+  .floor-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+}
